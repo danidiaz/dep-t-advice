@@ -191,29 +191,12 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 --
 -- Experiment about adding instrumetation
 
-advicedEnv :: Env (DepT Env (Writer TestTrace))
-advicedEnv =
-  let loggingAdvice args action = do
-        e <- ask
-        logger e $ "advice before: " ++ intercalate "," args
-        r <- action
-        logger e $ "advice after"
-        pure r
-   in env {
-            _controller = advise @Show @_ @HasLogger show loggingAdvice (_controller env)
-          }
-
-expectedAdviced :: TestTrace
-expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm going to write the entity!", "advice after"], [7])
-
--- a small test of constraint composition
-weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
-weirdAdvicedEnv =
-  let loggingAdvice = Advice 
-        (Proxy [String])
+doLogging :: Advice Show HasLogger Top  
+doLogging = Advice
+        (Proxy @[String])
         (\args -> do
             e <- ask
-            let args' = cfoldMap_NP @Show (\(I a) -> show a) args
+            let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
             logger e $ "advice before: " ++ intercalate "," args'
             pure (pure args))
         (\strArgs action -> do 
@@ -221,10 +204,25 @@ weirdAdvicedEnv =
             r <- action
             logger e $ "advice after"
             pure r)
-   in env {
-            _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top loggingAdvice (_controller env) --,
-            -- _logger = advise @(Show `And` Eq) @_ @EnvTop show (\_ -> id) (_logger env)
-          }
+
+advicedEnv :: Env (DepT Env (Writer TestTrace))
+advicedEnv =
+   env {
+         _controller = advise doLogging (_controller env)
+       }
+
+expectedAdviced :: TestTrace
+expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm going to write the entity!", "advice after"], [7])
+
+-- a small test of constraint composition
+weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
+weirdAdvicedEnv =
+   env {
+         _controller = advise doLogging (_controller env) --,
+         -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
+         -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
+         -- _logger = advise @(Show `And` Eq) @_ @EnvTop show (\_ -> id) (_logger env)
+       }
 
 -- isolatedAdvice :: (ArgAwareAdvisee
 --                                   Show
