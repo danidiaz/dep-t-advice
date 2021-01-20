@@ -17,6 +17,7 @@ module Main (main) where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
+import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Kind
@@ -238,6 +239,11 @@ doLogging':: Advice Show HasLoggerAndWriter cr
 doLogging'= restrictEnv (Sub Dict) doLogging
 
 doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
+
+returnMempty' :: Advice ca cem (Monoid `And` Show)
+returnMempty' = restrictResult (Sub Dict) returnMempty
+
+returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
 
 -- isolatedAdvice :: (ArgAwareAdvisee
 --                                   Show

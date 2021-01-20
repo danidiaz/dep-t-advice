@@ -38,6 +38,7 @@ module Control.Monad.Dep.Advice
     advise,
 
     -- * Combining Advices by harmonizing their constraints
+    -- $restrict
     restrictArgs,
     restrictEnv,
     restrictResult,
@@ -50,6 +51,7 @@ module Control.Monad.Dep.Advice
     BaseConstraint,
 
     -- * "sop-core" re-exports
+    -- $sop
     Top,
     All,
     And,
@@ -58,6 +60,7 @@ module Control.Monad.Dep.Advice
     cfoldMap_NP,
 
     -- * "constraints" re-exports
+    -- $constraints
     type (:-) (..),
     Dict (..),
   )
@@ -183,9 +186,20 @@ instance Monoid (Advice ca cem cr) where
 -- |
 --    The most general (and complex) way of constructing 'Advice's.
 --
+--    'Advice's work in two phases. First, the arguments of the transformed
+--    function are collected into an n-ary product 'NP', and passed to the
+--    first argument of 'makeAdvice', which produces a (possibly transformed)
+--    product of arguments, along with some summary value of type @u@. Use @()@
+--    as the summary value if you don't care about it.
+--
+--    In the second phase, the monadic action produced by the function once all
+--    arguments have been given is transformed using the second argument of
+--    'makeAdvice'. This second argument also receives the summary value of
+--    type @u@ calculated earlier.
+--
 --    __/IMPORTANT!/__ When invoking this function, you must always give the type
 --    of the existential @u@ through a type application. Otherwise you'll get
---    weird \"u is untouchable\" errors.
+--    weird \"u is untouchable\" errors. 
 makeAdvice ::
   forall u ca cem cr.
   -- | The function that tweaks the arguments.
@@ -204,6 +218,10 @@ makeAdvice ::
   Advice ca cem cr
 makeAdvice = Advice (Proxy @u)
 
+-- |
+--    Create an advice which only tweaks and/or analyzes the function arguments.
+--
+--    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 makeArgsAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the arguments.
@@ -221,6 +239,10 @@ makeArgsAdvice tweakArgs =
     )
     (const id)
 
+-- |
+--    Create an advice which only tweaks the execution of the final monadic action.
+--
+--    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 makeExecutionAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the execution.
@@ -233,9 +255,6 @@ makeExecutionAdvice ::
 makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
 
 data Pair a b = Pair !a !b
-
-
-
 
 --
 --
@@ -290,7 +309,11 @@ type Capable ::
 type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
 
--- | Apply an Advice to some compatible function. The function must have its effects in 'DepT'.
+-- | Apply an 'Advice' to some compatible function. The function must have its
+-- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
+--
+-- If the @ca@, @cem@ or @cr@ constraints of the supplied 'Advice' remain
+-- polymorphic, they must be given types by means of type applications.
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
@@ -379,6 +402,56 @@ class c m => BaseConstraint c e m
 
 instance c m => BaseConstraint c e m
 
+
+{- $restrict
+
+    'Advice' values can be composed using the 'Monoid' instance, but only if
+    the have the same constraint parameters. It's unfortunate that—unlike with
+    normal functions—'Advice' constaints aren't automatically "collected"
+    during composition.
+
+    We need to harmonize the constraints on each value by turning them into the
+    combination of all constraints. The functions in this section help with
+    that.
+
+    These functions take as parameter evidence of entailment between
+    constraints, using the type '(:-)' from the \"constraints\" package.  But
+    how to construct such evidence? By using the 'Sub' and the 'Dict'
+    constructors, with either an explicit type signature:
+
+@
+returnMempty :: Advice ca cem Monoid
+
+returnMempty' :: Advice ca cem (Monoid `And` Show)
+returnMempty' = restrictResult (Sub Dict) returnMempty
+@
+
+or a type application to the restriction function:
+
+@
+returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
+@
+
+Another example:
+
+@
+doLogging :: Advice Show HasLogger cr
+
+
+type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
+type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+
+doLogging':: Advice Show HasLoggerAndWriter cr
+doLogging'= restrictEnv (Sub Dict) doLogging
+
+doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
+@
+
+-}
+
+{- |
+    Makes the constraint on the arguments more restrictive.
+ -}
 -- think about the order of the type parameters... which is more useful? is it relevant?
 -- A possible principle to follow:
 
@@ -425,6 +498,9 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           tweakExecution'
    in captureExistential evidence proxy tweakArgs tweakExecution
 
+{-|
+    Makes the constraint on the environment / monad more restrictive.
+ -}
 restrictEnv ::
   forall more ca less cr.
   -- | Evidence that one constraint implies the other.
@@ -463,13 +539,16 @@ restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
           )
    in captureExistential evidence proxy tweakArgs tweakExecution
 
+{-|
+    Makes the constraint on the result more restrictive.
+ -}
 restrictResult ::
   forall more ca cem less.
   -- | Evidence that one constraint implies the other.
   (forall r. more r :- less r) ->
   -- | Advice with less restrictive constraint on the result.
   Advice ca cem less ->
-  -- | Advice with less restrictive constraint on the result.
+  -- | Advice with more restrictive constraint on the result.
   Advice ca cem more
 restrictResult evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
@@ -502,3 +581,33 @@ translateEvidence :: forall more less a. (forall x. more x :- less x) -> SOP.Dic
 translateEvidence evidence SOP.Dict =
   case evidence @a of
     Sub Dict -> SOP.Dict @less @a
+
+{- $sop
+Some useful definitions re-exported the from \"sop-core\" package.
+
+'NP' is an n-ary product used to represent the argument lists of functions.
+
+'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific.
+
+'And' combines constraints.
+
+'All' says that some constraint is satisfied by all the types of an 'NP' product.
+
+'I' is an identity functor.
+
+'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example 
+
+@
+cfoldMap_NP (Proxy @Show) (\\(I a) -> [show a])
+@
+
+-}
+
+
+{- $constraints
+ 
+Some useful definitions re-exported the from \"constraints\" package.
+
+'Dict' and '(:-)' are GADTs used to capture and transform constraints. 
+
+-}
