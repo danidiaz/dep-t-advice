@@ -261,17 +261,35 @@ instance c m => MonadConstraint c e m
 
 -- infixl 7 `ArgAnd`
 
-type ArgTop x = Top x
+-- type ArgTop x = Top x
 
 -- type ArgAnd f g = And f g
 -- infixl 7 `ArgAnd`
 
-type ResTop x = Top x
+-- type ResTop x = Top x
 
 -- type ResAnd f g = And f g
 -- infixl 7 `ResAnd`
 
--- restrictRes :: forall more less ca cem . (forall r . less r :- more r) -> Advice ca cem less -> Advice ca cem more
--- restrictRes (Sub Dict) (Advice proxy tweakArgsOuter tweakExecutionOuter) = Advice proxy tweakArgsOuter tweakExecutionOuter
+restrictRes :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
+restrictRes evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+    let captureExistential ::
+          forall ca cem more less u.
+          (forall r . more r :- less r) ->
+          Proxy u ->
+          ( forall as e m.
+            (All ca as, Capable cem e m) =>
+            NP I as ->
+            DepT e m (u, NP I as)
+          ) ->
+          ( forall e m r.
+            (Capable cem e m, less r) =>
+            u ->
+            DepT e m r ->
+            DepT e m r
+          ) ->
+          Advice ca cem more
+        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = Advice (Proxy @u) tweakArgsOuter' _
+     in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
     
 
