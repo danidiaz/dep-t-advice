@@ -20,26 +20,33 @@
 {-# LANGUAGE UndecidableSuperClasses #-}
 
 {-| 
- - This package provices the 'Advice' datatype, along for functions for creating, manipulating, composing and applying them.
- -
- - 'Advice's represent generic transformations on 'DepT'-effectful functions of any number of arguments.
+ This package provices the 'Advice' datatype, along for functions for creating,
+ manipulating, composing and applying them.
+ 
+ 'Advice's represent generic transformations on 'DepT'-effectful functions of
+ any number of arguments.
  -}
  
 module Control.Monad.Dep.Advice
-  ( Capable,
+  (
+    -- * The Advice type
     Advice,
+    -- * Creating Advice values
     makeAdvice,
     makeArgsAdvice,
     makeExecutionAdvice,
+    -- * Applying Advices
     advise,
+    -- * Combining Advices by harmonizing their constraints
+    restrictArgs,
+    restrictEnv,
+    restrictResult,
+    -- * Constraint helpers
+    Capable,
     EnvTop,
     EnvAnd,
     EnvEq,
     BaseConstraint,
-    restrictArgs,
-    restrictEnv,
-    restrictResult,
-
     -- * "sop-core" re-exports
     Top,
     All,
@@ -69,9 +76,11 @@ type Capable ::
   ((Type -> Type) -> Type) ->
   (Type -> Type) ->
   Constraint
-
 type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
+-- | A generic transformation on 'DepT'-effectful function of any number of
+-- arguments, provided the functions satisfies some constraints on the
+-- arguments, the environment datatype and base monad, and the return type.
 type Advice ::
   (Type -> Constraint) ->
   (Type -> (Type -> Type) -> Constraint) ->
@@ -95,18 +104,20 @@ data Advice ca cem cr where
     Advice ca cem cr
 
 -- |
---    The most general (and complex) way of constructing 'Advice'.
+--    The most general (and complex) way of constructing 'Advice's.
 --
 --    __/IMPORTANT!/__ When invoking this function, you must always give the type
 --    of the existential @u@ through a type application. Otherwise you'll get
 --    weird \"u is untouchable\" errors.
 makeAdvice ::
   forall u ca cem cr.
+  -- | The function that tweaks the arguments.
   ( forall as e m.
     (All ca as, Capable cem e m) =>
     NP I as ->
     DepT e m (u, NP I as)
   ) ->
+  -- | The function that tweaks the execution.
   ( forall e m r.
     (Capable cem e m, cr r) =>
     u ->
@@ -118,6 +129,7 @@ makeAdvice = Advice (Proxy @u)
 
 makeArgsAdvice ::
   forall ca cem cr.
+  -- | The function that tweaks the arguments.
   ( forall as e m.
     (All ca as, Capable cem e m) =>
     NP I as ->
@@ -134,6 +146,7 @@ makeArgsAdvice tweakArgs =
 
 makeExecutionAdvice ::
   forall ca cem cr.
+  -- | The function that tweaks the execution.
   ( forall e m r.
     cr r =>
     DepT e m r ->
@@ -208,6 +221,7 @@ instance Monoid (Advice ca cem cr) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
+-- | Apply an Advice to some compatible function with effects in 'DepT'.
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
@@ -221,8 +235,6 @@ advise (Advice _ tweakArgs tweakExecution) advisee = do
         tweakExecution u (uncurried args')
    in multicurry @as @e @m @r uncurried'
 
--- this class is for decomposing I think. It should ignore all constraints.
--- do we need to include e and m here?
 type Multicurryable ::
   [Type] ->
   ((Type -> Type) -> Type) ->
@@ -245,9 +257,10 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 -- |
 --    A constraint which requires nothing of the environment and the associated monad.
 --
---    Pass this with a type application to 'advise' and 'advise' when no constraint is needed.
+--    Useful as the @cem@ type application argument to 'advise' and 'restricEnv'.
 --
---    The @-Top@ and @-And@ constraints have been lifted from the @Top@ and @And@ constraints from sop-core.
+--    For similar behavior with the @ar@ and @cr@ type arguments 'advise' and
+--    'restricEnv', use 'Top' from \"sop-core\".
 type EnvTop :: (Type -> (Type -> Type) -> Constraint)
 class EnvTop e m
 
@@ -258,6 +271,13 @@ instance EnvTop e m
 --
 --    For example, an advice which requires both a @HasLogger@ and a
 --    @HasRepository@ migh use this.
+--
+--    Useful to build the @cem@ type application argument to 'advise' and
+--    'restricEnv'.
+--
+--    For similar behavior with the @ar@ and @cr@ type arguments 'advise' and
+--    'restricEnv', use 'And' from \"sop-core\".
+--
 type EnvAnd :: (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
 class (f e m, g e m) => (f `EnvAnd` g) e m
 
@@ -266,15 +286,26 @@ instance (f e m, g e m) => (f `EnvAnd` g) e m
 infixl 7 `EnvAnd`
 
 -- |
---    Useful when whe don't want to instrument some generic environment, but a
---    concrete one, with direct access to all fields and all that.
+--    When whe don't want to advise functions in some generic 'DepT'
+--    environment, but in a concrete environment with a concrete base monad,
+--    having access to all the fields.
+--
+--    Useful to build the @cem@ type application argument to 'advise' and
+--    'restricEnv'.
+--
+--    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
+--    'restricEnv', use a partially applied type equality, like @((~) Int)@.
+--
 type EnvEq :: Type -> (Type -> Type) -> Type -> (Type -> Type) -> Constraint
 class (c' ~ c, m' ~ m) => EnvEq c' m' c m
 
 instance (c' ~ c, m' ~ m) => EnvEq c' m' c m
 
 -- |
---    Allows us to require a constraint only on the base monad. Useful for requiring @MonadIO@ for example.
+--    Allows us to require a constraint only on the base monad, for example a base moonad with @MonadIO@.
+--
+--    Useful to build @cem@ type application argument to 'advise' and 'restricEnv'.
+--
 type BaseConstraint :: ((Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
 class c m => BaseConstraint c e m
 
