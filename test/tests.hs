@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Main (main) where
 
@@ -229,6 +230,15 @@ weirdAdvicedEnv =
          -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
          -- _logger = advise @(Show `And` Eq) @_ @EnvTop show (\_ -> id) (_logger env)
        }
+
+type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
+type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+
+-- to ways to invoke restrict functions
+doLogging':: Advice Show HasLoggerAndWriter cr
+doLogging'= restrictEnv (Sub Dict) doLogging
+
+doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
 
 -- isolatedAdvice :: (ArgAwareAdvisee
 --                                   Show

@@ -38,6 +38,8 @@ module Control.Monad.Dep.Advice
     I(..),
     cfoldMap_NP,
     -- * "constraints" re-export
+    type (:-)(..),
+    Dict(..)
   )
 where
 
@@ -151,23 +153,6 @@ instance Monoid (Advice ca cem cr) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
--- A function can be an advisee if it's multicurryable,
--- and the list of arguments, the return type, and the environment, satisfy some requisites.
--- type Advisee ::
---   (Type -> Constraint) ->
---   (Type -> (Type -> Type) -> Constraint) ->
---   (Type -> Constraint) ->
---   [Type] ->
---   ((Type -> Type) -> Type) ->
---   (Type -> Type) ->
---   Type ->
---   Type ->
---   Constraint
--- -- do we really need as e m r here, or could we go with the constraints only?
--- -- Perhaps using a type family? Would that be bad for inference?
--- class (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) => Advisee ca cem cr as e m r advisee where
---   advise :: Advice ac cem cr -> advisee -> advisee
-
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
@@ -201,23 +186,6 @@ instance Multicurryable '[] e m r (DepT e m r) where
 instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
   multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
-
--- instance (Capable cem e m, cr r) => Advisee ca cem cr '[] e m r (DepT e m r) where
---     advise (Advice {tweakArgs,tweakExecution}) advisee =
---       do _ <- tweakArgs Nil
---          tweakExecution advisee
-
--- The advice shouldn't care about the as! At least in the definition.
--- But the advisee typeclass *should care*
--- One typeclass to go backwards and forwards?
--- Uncurry typeclass?
--- The terminal case *doesn't know* how many previous parameters there have been.
--- extra parameter, start with '[] to signify "this is the beginning of the function" ?
-
--- instance (Advisee ac c e m r, ac a) => Advisee ac c e m (a -> r) where
---   give (Advice {tweakArgs,tweakExecution}) (f :: a -> r) a =
---     give @ac @c @e @m @r (Advice (\args -> tweakArgs (args)) tweakExecution) (f a)
---     -- give @ac @c @e @m @r (Advice (\args d -> advice (I a :* args) d)) (f a)
 
 -- |
 --    A constraint which requires nothing of the environment and the associated monad.
@@ -258,9 +226,13 @@ class c m => BaseConstraint c e m
 instance c m => BaseConstraint c e m
 
 -- think about the order of the type parameters... which is more useful? is it relevant?
-
+-- A possible principle to follow: 
+-- * We are likely to know the "less" constraint, because advices are likely to compe pre-packaged and having a type signature.
+-- * We arent' so sure about having a signature for a whole composed Advice, because the composition might be done
+-- on the fly, while constructing a record, without a top-level binding with a type signature.
+-- This seems to favor putting "more" first.
 restrictArgs :: forall more less cem cr. (forall r . more r :- less r) -> Advice less cem cr -> Advice more cem cr
-restrictArgs evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+restrictArgs evidence (Advice proxy tweakArgs tweakExecution) = 
     let captureExistential ::
           forall more less cem cr u.
           (forall r . more r :- less r) ->
@@ -277,19 +249,19 @@ restrictArgs evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             DepT e m r
           ) ->
           Advice more cem cr
-        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+        captureExistential evidence' _ tweakArgs' tweakExecution' = 
             Advice 
             (Proxy @u) 
-            (let tweakArgsOuter'' :: forall as e m. (All more as, Capable cem e m) => NP I as -> DepT e m (u, NP I as)
-                 tweakArgsOuter'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
+            (let tweakArgs'' :: forall as e m. (All more as, Capable cem e m) => NP I as -> DepT e m (u, NP I as)
+                 tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
                        f -> case f (SOP.Dict @(All more) @as) of
-                         SOP.Dict -> \args -> tweakArgsOuter' @as @e @m args 
-              in tweakArgsOuter'')
-            tweakExecutionOuter' 
-     in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
+                         SOP.Dict -> \args -> tweakArgs' @as @e @m args 
+              in tweakArgs'')
+            tweakExecution' 
+     in captureExistential evidence proxy tweakArgs tweakExecution  
     
 restrictEnv :: forall more less ca cr . (forall e m . Capable more e m :- Capable less e m) -> Advice ca less cr -> Advice ca more cr
-restrictEnv evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+restrictEnv evidence (Advice proxy tweakArgs tweakExecution) = 
     let captureExistential ::
           forall ca more less cr u.
           (forall e m . Capable more e m :- Capable less e m) -> 
@@ -306,19 +278,19 @@ restrictEnv evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             DepT e m r
           ) ->
           Advice ca more cr
-        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+        captureExistential evidence' _ tweakArgs' tweakExecution' = 
             Advice 
             (Proxy @u) 
-             (let tweakArgsOuter'' :: forall as e m. (All ca as, Capable more e m) => NP I as -> DepT e m (u, NP I as)
-                  tweakArgsOuter'' = case evidence' @e @m of Sub Dict -> \args -> tweakArgsOuter' @as @e @m args
-               in tweakArgsOuter'')
-            (let tweakExecutionOuter'' :: forall e m r. (Capable more e m, cr r) => u -> DepT e m r -> DepT e m r 
-                 tweakExecutionOuter'' = case evidence' @e @m of Sub Dict -> \u action -> tweakExecutionOuter' @e @m @r u action
-              in tweakExecutionOuter'') 
-     in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
+             (let tweakArgs'' :: forall as e m. (All ca as, Capable more e m) => NP I as -> DepT e m (u, NP I as)
+                  tweakArgs'' = case evidence' @e @m of Sub Dict -> \args -> tweakArgs' @as @e @m args
+               in tweakArgs'')
+            (let tweakExecution'' :: forall e m r. (Capable more e m, cr r) => u -> DepT e m r -> DepT e m r 
+                 tweakExecution'' = case evidence' @e @m of Sub Dict -> \u action -> tweakExecution' @e @m @r u action
+              in tweakExecution'') 
+     in captureExistential evidence proxy tweakArgs tweakExecution  
 
 restrictResult :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
-restrictResult evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+restrictResult evidence (Advice proxy tweakArgs tweakExecution) = 
     let captureExistential ::
           forall ca cem more less u.
           (forall r . more r :- less r) ->
@@ -335,14 +307,14 @@ restrictResult evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             DepT e m r
           ) ->
           Advice ca cem more
-        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+        captureExistential evidence' _ tweakArgs' tweakExecution' = 
             Advice 
             (Proxy @u) 
-            tweakArgsOuter' 
-            (let tweakExecutionOuter'' :: forall e m r. (Capable cem e m, more r) => u -> DepT e m r -> DepT e m r 
-                 tweakExecutionOuter'' = case evidence' @r of Sub Dict -> \u action -> tweakExecutionOuter' @e @m @r u action
-              in tweakExecutionOuter'') 
-     in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
+            tweakArgs' 
+            (let tweakExecution'' :: forall e m r. (Capable cem e m, more r) => u -> DepT e m r -> DepT e m r 
+                 tweakExecution'' = case evidence' @r of Sub Dict -> \u action -> tweakExecution' @e @m @r u action
+              in tweakExecution'') 
+     in captureExistential evidence proxy tweakArgs tweakExecution  
     
 translateEvidence :: forall more less a. (forall x . more x :- less x) -> SOP.Dict more a -> SOP.Dict less a
 translateEvidence evidence SOP.Dict = 
