@@ -19,34 +19,36 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
-{-| 
- This package provices the 'Advice' datatype, along for functions for creating,
- manipulating, composing and applying values of that type.
- 
- 'Advice's represent generic transformations on 'DepT'-effectful functions of
- any number of arguments.
- -}
- 
+-- |
+-- This package provices the 'Advice' datatype, along for functions for creating,
+-- manipulating, composing and applying values of that type.
+--
+-- 'Advice's represent generic transformations on 'DepT'-effectful functions of
+-- any number of arguments.
 module Control.Monad.Dep.Advice
-  (
-    -- * The Advice type
+  ( -- * The Advice type
     Advice,
+
     -- * Creating Advice values
     makeAdvice,
     makeArgsAdvice,
     makeExecutionAdvice,
+
     -- * Applying Advices
     advise,
+
     -- * Combining Advices by harmonizing their constraints
     restrictArgs,
     restrictEnv,
     restrictResult,
+
     -- * Constraint helpers
     Capable,
     EnvTop,
     EnvAnd,
     EnvEq,
     BaseConstraint,
+
     -- * "sop-core" re-exports
     Top,
     All,
@@ -76,11 +78,28 @@ type Capable ::
   ((Type -> Type) -> Type) ->
   (Type -> Type) ->
   Constraint
+
 type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
 -- | A generic transformation of a 'DepT'-effectful function of any number of
--- arguments, provided the functions satisfies some constraints on the
+-- arguments, provided the function satisfies certain constraints on the
 -- arguments, the environment datatype and base monad, and the return type.
+--
+-- It is parameterized by three constraints:
+--
+-- * @ca@ of kind @Type -> Constraint@, the constraint required of each argument (usually something like @Show@).
+-- * @cem@ of kind @Type -> (Type -> Type) -> Constraint@, the constraint required of the 'DepT'-environment / base monad combination (usually something like @HasLogger@).
+-- * @cr@ of kind @Type -> Constraint@, the constraint required of the return type.
+--
+-- We can constrain the 'Advice' to work with concrete types by using partially
+-- applied equality constraints in the case of @ca@ and @cr@, and 'EnvEq' in
+-- the case of @cem@.
+--
+-- 'Advice's that don't care about a particular constraint can leave it
+-- polymorphic, and this facilitates composition, but the constraint must be
+-- given some concrete value ('Top' in the case of @ca@ and @cr@, 'EnvTop' in
+-- the case of @cem@) through type application at the moment of applying the
+-- 'Advice' with 'advise'.
 type Advice ::
   (Type -> Constraint) ->
   (Type -> (Type -> Type) -> Constraint) ->
@@ -148,7 +167,7 @@ makeExecutionAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the execution.
   ( forall e m r.
-    cr r =>
+    (Capable cem e m, cr r) =>
     DepT e m r ->
     DepT e m r
   ) ->
@@ -158,7 +177,11 @@ makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) 
 data Pair a b = Pair !a !b
 
 -- |
---    The first advice is the "outer" one. It also tweaks the function arguments first. 
+--    Aspects compose \"sequentially\" when tweaking the arguments, and
+--    \"concentrically\" when tweaking the final 'DepT' action.
+--
+--    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
+--    first, and wraps around the execution of the second, \"inner\" 'Advice'.
 instance Semigroup (Advice ca cem cr) where
   Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
     let captureExistentials ::
@@ -225,7 +248,9 @@ instance Monoid (Advice ca cem cr) where
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
+  -- | The advice to apply.
   Advice ca cem cr ->
+  -- | A function to be adviced.
   advisee ->
   advisee
 advise (Advice _ tweakArgs tweakExecution) advisee = do
@@ -257,10 +282,10 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 -- |
 --    A constraint which requires nothing of the environment and the associated monad.
 --
---    Useful as the @cem@ type application argument to 'advise' and 'restricEnv'.
+--    Useful as the @cem@ type application argument to 'advise' and 'restrictEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments 'advise' and
---    'restricEnv', use 'Top' from \"sop-core\".
+--    'restrictEnv', use 'Top' from \"sop-core\".
 type EnvTop :: (Type -> (Type -> Type) -> Constraint)
 class EnvTop e m
 
@@ -273,11 +298,10 @@ instance EnvTop e m
 --    @HasRepository@ migh use this.
 --
 --    Useful to build the @cem@ type application argument to 'advise' and
---    'restricEnv'.
+--    'restrictEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments 'advise' and
---    'restricEnv', use 'And' from \"sop-core\".
---
+--    'restrictEnv', use 'And' from \"sop-core\".
 type EnvAnd :: (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
 class (f e m, g e m) => (f `EnvAnd` g) e m
 
@@ -294,8 +318,7 @@ infixl 7 `EnvAnd`
 --    'restricEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
---    'restricEnv', use a partially applied type equality, like @((~) Int)@.
---
+--    'restrictEnv', use a partially applied type equality, like @((~) Int)@.
 type EnvEq :: Type -> (Type -> Type) -> Type -> (Type -> Type) -> Constraint
 class (c' ~ c, m' ~ m) => EnvEq c' m' c m
 
@@ -305,7 +328,6 @@ instance (c' ~ c, m' ~ m) => EnvEq c' m' c m
 --    Allows us to require a constraint only on the base monad, for example a base moonad with @MonadIO@.
 --
 --    Useful to build @cem@ type application argument to 'advise' and 'restricEnv'.
---
 type BaseConstraint :: ((Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
 class c m => BaseConstraint c e m
 
@@ -320,7 +342,14 @@ instance c m => BaseConstraint c e m
 
 -- on the fly, while constructing a record, without a top-level binding with a type signature.
 -- This seems to favor putting "more" first.
-restrictArgs :: forall more less cem cr. (forall r. more r :- less r) -> Advice less cem cr -> Advice more cem cr
+restrictArgs ::
+  forall more less cem cr.
+  -- | Evidence that one constraint implies the other.
+  (forall r. more r :- less r) ->
+  -- | Advice with less restrictive constraint on the args.
+  Advice less cem cr ->
+  -- | Advice with more restrictive constraint on the args.
+  Advice more cem cr
 restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more less cem cr u.
@@ -350,7 +379,14 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           tweakExecution'
    in captureExistential evidence proxy tweakArgs tweakExecution
 
-restrictEnv :: forall more ca less cr. (forall e m. Capable more e m :- Capable less e m) -> Advice ca less cr -> Advice ca more cr
+restrictEnv ::
+  forall more ca less cr.
+  -- | Evidence that one constraint implies the other.
+  (forall e m. Capable more e m :- Capable less e m) ->
+  -- | Advice with less restrictive constraint on the environment and base monad.
+  Advice ca less cr ->
+  -- | Advice with more restrictive constraint on the environment and base monad.
+  Advice ca more cr
 restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more ca less cr u.
@@ -381,7 +417,14 @@ restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
           )
    in captureExistential evidence proxy tweakArgs tweakExecution
 
-restrictResult :: forall more ca cem less. (forall r. more r :- less r) -> Advice ca cem less -> Advice ca cem more
+restrictResult ::
+  forall more ca cem less.
+  -- | Evidence that one constraint implies the other.
+  (forall r. more r :- less r) ->
+  -- | Advice with less restrictive constraint on the result.
+  Advice ca cem less ->
+  -- | Advice with less restrictive constraint on the result.
+  Advice ca cem more
 restrictResult evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more ca cem less u.
