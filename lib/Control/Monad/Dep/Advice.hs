@@ -78,7 +78,7 @@ type Capable ::
   Constraint
 type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
--- | A generic transformation on 'DepT'-effectful function of any number of
+-- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the functions satisfies some constraints on the
 -- arguments, the environment datatype and base monad, and the return type.
 type Advice ::
