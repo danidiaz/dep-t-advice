@@ -26,6 +26,7 @@ Stuff like:
 - Caching
 - Monitoring
 - Setting up transaction boundaries.
+- Setting up exception handlers for uncaught exceptions.
 - Some form of interactive debugging.
 
 But how will you go about it?
