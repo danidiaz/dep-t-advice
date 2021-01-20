@@ -289,7 +289,8 @@ restrictRes evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             DepT e m r
           ) ->
           Advice ca cem more
-        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = Advice (Proxy @u) tweakArgsOuter' _
+        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = Advice (Proxy @u) tweakArgsOuter' 
+            (\u action -> _)
      in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
     
 
