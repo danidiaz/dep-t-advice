@@ -251,8 +251,8 @@ class c m => MonadConstraint c e m
 
 instance c m => MonadConstraint c e m
 
-restrictRes :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
-restrictRes evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+restrictResult :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
+restrictResult evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
     let captureExistential ::
           forall ca cem more less u.
           (forall r . more r :- less r) ->
