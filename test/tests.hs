@@ -193,14 +193,13 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 -- Experiment about adding instrumetation
 
 emptyResult :: Advice ca cem Monoid
-emptyResult = Advice (Proxy @())
+emptyResult = makeAdvice @()
     (\args -> pure ((), args))
     (\() action -> do _ <- action
                       pure mempty)
 
 doLogging :: Advice Show HasLogger cr
-doLogging = Advice
-        (Proxy @[String])
+doLogging = makeAdvice @[String]
         (\args -> do
             e <- ask
             let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args

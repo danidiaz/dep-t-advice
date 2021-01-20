@@ -26,8 +26,8 @@ import Control.Monad.Dep.Advice
 import Data.Proxy
 
 returnMempty :: Advice ca cem Monoid
-returnMempty = Advice 
-    (Proxy @())
+returnMempty = 
+    makeAdvice @()
     (\args -> pure ((), args))
     (\() action -> do _ <- action
                       pure mempty)
