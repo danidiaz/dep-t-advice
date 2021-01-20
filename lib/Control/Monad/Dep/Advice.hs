@@ -61,12 +61,11 @@ type Capable ::
 
 type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
--- type Advice ::
---   (Type -> Constraint) ->
---   (Type -> (Type -> Type) -> Constraint) ->
---   ((Type -> Type) -> Type) ->
---   (Type -> Type) ->
---   Type
+type Advice ::
+  (Type -> Constraint) ->
+  (Type -> (Type -> Type) -> Constraint) ->
+  (Type -> Constraint) ->
+  Type
 data Advice ca cem cr where
   Advice ::
     forall u ca cem cr.
@@ -260,10 +259,10 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
             tweakExecution' 
      in captureExistential evidence proxy tweakArgs tweakExecution  
     
-restrictEnv :: forall more less ca cr . (forall e m . Capable more e m :- Capable less e m) -> Advice ca less cr -> Advice ca more cr
+restrictEnv :: forall more ca less cr . (forall e m . Capable more e m :- Capable less e m) -> Advice ca less cr -> Advice ca more cr
 restrictEnv evidence (Advice proxy tweakArgs tweakExecution) = 
     let captureExistential ::
-          forall ca more less cr u.
+          forall more ca less cr u.
           (forall e m . Capable more e m :- Capable less e m) -> 
           Proxy u ->
           ( forall as e m.
@@ -289,10 +288,10 @@ restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
               in tweakExecution'') 
      in captureExistential evidence proxy tweakArgs tweakExecution  
 
-restrictResult :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
+restrictResult :: forall more ca cem less . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
 restrictResult evidence (Advice proxy tweakArgs tweakExecution) = 
     let captureExistential ::
-          forall ca cem more less u.
+          forall more ca cem less u.
           (forall r . more r :- less r) ->
           Proxy u ->
           ( forall as e m.
