@@ -200,13 +200,13 @@ emptyResult = makeAdvice @()
                       pure mempty)
 
 doLogging :: Advice Show HasLogger cr
-doLogging = makeAdvice @[String]
+doLogging = makeAdvice @()
         (\args -> do
             e <- ask
             let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
             logger e $ "advice before: " ++ intercalate "," args'
             pure (pure args))
-        (\strArgs action -> do 
+        (\() action -> do 
             e <- ask
             r <- action
             logger e $ "advice after"
@@ -225,10 +225,9 @@ expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm g
 weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
 weirdAdvicedEnv =
    env {
-         _controller = advise (doLogging <> emptyResult) (_controller env) --,
-         -- _controller = advise @Show @(HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
-         -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
-         -- _logger = advise @(Show `And` Eq) @_ @EnvTop show (\_ -> id) (_logger env)
+         _controller = advise (doLogging <> emptyResult) (_controller env), --,
+         -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
+         _logger = advise @(Show `And` Eq) @EnvTop @Monoid (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
        }
 
 type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
