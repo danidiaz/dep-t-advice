@@ -8,8 +8,6 @@
 {-# LANGUAGE GADTSyntax #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -72,7 +70,6 @@ import Data.Kind
 import Data.SOP
 import Data.SOP.Dict qualified as SOP
 import Data.SOP.NP
-
 
 -- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the function satisfies certain constraints on the
@@ -199,7 +196,7 @@ instance Monoid (Advice ca cem cr) where
 --
 --    __/IMPORTANT!/__ When invoking this function, you must always give the type
 --    of the existential @u@ through a type application. Otherwise you'll get
---    weird \"u is untouchable\" errors. 
+--    weird \"u is untouchable\" errors.
 makeAdvice ::
   forall u ca cem cr.
   -- | The function that tweaks the arguments.
@@ -259,10 +256,11 @@ data Pair a b = Pair !a !b
 --
 --
 --
+
 -- | This helper type synonym has three parameters:
 --
 -- * A two-place typeclass relating a fully constructed environment type to the
--- monad on which the functions in the enviroment have their effects. 
+-- monad on which the functions in the enviroment have their effects.
 -- * The type constructor of an environment parameterizable by a monad.
 -- * The monad to be used as the base monad for 'DepT'.
 --
@@ -279,7 +277,7 @@ data Pair a b = Pair !a !b
 --    logger :: r -> String -> m ()
 -- @
 --
--- and the parameterizable enviroment 
+-- and the parameterizable enviroment
 --
 -- @
 -- type Env :: (Type -> Type) -> Type
@@ -300,14 +298,13 @@ data Pair a b = Pair !a !b
 --
 -- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
 -- contains a logging function that works in 'DepT' over 'IO'.
---
 type Capable ::
   (Type -> (Type -> Type) -> Constraint) ->
   ((Type -> Type) -> Type) ->
   (Type -> Type) ->
   Constraint
-type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
+type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
@@ -402,56 +399,53 @@ class c m => BaseConstraint c e m
 
 instance c m => BaseConstraint c e m
 
+-- $restrict
+--
+--    'Advice' values can be composed using the 'Monoid' instance, but only if
+--    the have the same constraint parameters. It's unfortunate that—unlike with
+--    normal functions—'Advice' constaints aren't automatically "collected"
+--    during composition.
+--
+--    We need to harmonize the constraints on each value by turning them into the
+--    combination of all constraints. The functions in this section help with
+--    that.
+--
+--    These functions take as parameter evidence of entailment between
+--    constraints, using the type '(:-)' from the \"constraints\" package.  But
+--    how to construct such evidence? By using the 'Sub' and the 'Dict'
+--    constructors, with either an explicit type signature:
+--
+-- @
+-- returnMempty :: Advice ca cem Monoid
+--
+-- returnMempty' :: Advice ca cem (Monoid `And` Show)
+-- returnMempty' = restrictResult (Sub Dict) returnMempty
+-- @
+--
+-- or a type application to the restriction function:
+--
+-- @
+-- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
+-- @
+--
+-- Another example:
+--
+-- @
+-- doLogging :: Advice Show HasLogger cr
+--
+--
+-- type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
+-- type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+--
+-- doLogging':: Advice Show HasLoggerAndWriter cr
+-- doLogging'= restrictEnv (Sub Dict) doLogging
+--
+-- doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
+-- @
 
-{- $restrict
+-- |
+--    Makes the constraint on the arguments more restrictive.
 
-    'Advice' values can be composed using the 'Monoid' instance, but only if
-    the have the same constraint parameters. It's unfortunate that—unlike with
-    normal functions—'Advice' constaints aren't automatically "collected"
-    during composition.
-
-    We need to harmonize the constraints on each value by turning them into the
-    combination of all constraints. The functions in this section help with
-    that.
-
-    These functions take as parameter evidence of entailment between
-    constraints, using the type '(:-)' from the \"constraints\" package.  But
-    how to construct such evidence? By using the 'Sub' and the 'Dict'
-    constructors, with either an explicit type signature:
-
-@
-returnMempty :: Advice ca cem Monoid
-
-returnMempty' :: Advice ca cem (Monoid `And` Show)
-returnMempty' = restrictResult (Sub Dict) returnMempty
-@
-
-or a type application to the restriction function:
-
-@
-returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
-@
-
-Another example:
-
-@
-doLogging :: Advice Show HasLogger cr
-
-
-type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
-type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
-
-doLogging':: Advice Show HasLoggerAndWriter cr
-doLogging'= restrictEnv (Sub Dict) doLogging
-
-doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
-@
-
--}
-
-{- |
-    Makes the constraint on the arguments more restrictive.
- -}
 -- think about the order of the type parameters... which is more useful? is it relevant?
 -- A possible principle to follow:
 
@@ -498,9 +492,8 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           tweakExecution'
    in captureExistential evidence proxy tweakArgs tweakExecution
 
-{-|
-    Makes the constraint on the environment / monad more restrictive.
- -}
+-- |
+--    Makes the constraint on the environment / monad more restrictive.
 restrictEnv ::
   forall more ca less cr.
   -- | Evidence that one constraint implies the other.
@@ -539,9 +532,8 @@ restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
           )
    in captureExistential evidence proxy tweakArgs tweakExecution
 
-{-|
-    Makes the constraint on the result more restrictive.
- -}
+-- |
+--    Makes the constraint on the result more restrictive.
 restrictResult ::
   forall more ca cem less.
   -- | Evidence that one constraint implies the other.
@@ -582,32 +574,27 @@ translateEvidence evidence SOP.Dict =
   case evidence @a of
     Sub Dict -> SOP.Dict @less @a
 
-{- $sop
-Some useful definitions re-exported the from \"sop-core\" package.
+-- $sop
+-- Some useful definitions re-exported the from \"sop-core\" package.
+--
+-- 'NP' is an n-ary product used to represent the argument lists of functions.
+--
+-- 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific.
+--
+-- 'And' combines constraints.
+--
+-- 'All' says that some constraint is satisfied by all the types of an 'NP' product.
+--
+-- 'I' is an identity functor.
+--
+-- 'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example
+--
+-- @
+-- cfoldMap_NP (Proxy @Show) (\\(I a) -> [show a])
+-- @
 
-'NP' is an n-ary product used to represent the argument lists of functions.
-
-'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific.
-
-'And' combines constraints.
-
-'All' says that some constraint is satisfied by all the types of an 'NP' product.
-
-'I' is an identity functor.
-
-'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example 
-
-@
-cfoldMap_NP (Proxy @Show) (\\(I a) -> [show a])
-@
-
--}
-
-
-{- $constraints
- 
-Some useful definitions re-exported the from \"constraints\" package.
-
-'Dict' and '(:-)' are GADTs used to capture and transform constraints. 
-
--}
+-- $constraints
+--
+-- Some useful definitions re-exported the from \"constraints\" package.
+--
+-- 'Dict' and '(:-)' are GADTs used to capture and transform constraints.

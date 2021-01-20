@@ -245,15 +245,6 @@ returnMempty' = restrictResult (Sub Dict) returnMempty
 
 returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
 
--- isolatedAdvice :: (ArgAwareAdvisee
---                                   Show
---                                   String
---                                   (EnvAnd HasLogger (MonadConstraint (MonadWriter TestTrace)))
---                                   e
---                                   m
---                                   r => 
--- isolatedAdvice = advise @Show @_ @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) show (\args action -> tell ([],[]) *> action)
-
 --
 --
 --
