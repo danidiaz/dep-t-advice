@@ -21,7 +21,7 @@
 
 {-| 
  This package provices the 'Advice' datatype, along for functions for creating,
- manipulating, composing and applying them.
+ manipulating, composing and applying values of that type.
  
  'Advice's represent generic transformations on 'DepT'-effectful functions of
  any number of arguments.
