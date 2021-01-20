@@ -26,17 +26,18 @@ module Control.Monad.Dep.Advice
     EnvTop,
     EnvAnd,
     EnvEq,
-    MonadConstraint,
+    BaseConstraint,
     restrictArgs,
     restrictEnv,
     restrictResult,
-    -- * sop-core re-exports
+    -- * "sop-core" re-exports
     Top,
     All,
     And,
     NP(..),
     I(..),
     cfoldMap_NP,
+    -- * "constraints" re-export
   )
 where
 
@@ -250,12 +251,11 @@ class (c' ~ c, m' ~ m) => EnvEq c' m' c m
 instance (c' ~ c, m' ~ m) => EnvEq c' m' c m
 
 -- |
---    Allows us to require a constraint only on the monad. Useful for requiring @MonadIO@ for example.
-type MonadConstraint :: ((Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
-class c m => MonadConstraint c e m
+--    Allows us to require a constraint only on the base monad. Useful for requiring @MonadIO@ for example.
+type BaseConstraint :: ((Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
+class c m => BaseConstraint c e m
 
-instance c m => MonadConstraint c e m
-
+instance c m => BaseConstraint c e m
 
 -- think about the order of the type parameters... which is more useful? is it relevant?
 

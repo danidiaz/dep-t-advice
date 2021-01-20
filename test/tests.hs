@@ -191,7 +191,7 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 --
 -- Experiment about adding instrumetation
 
-doLogging :: Advice Show HasLogger Top  
+doLogging :: Advice Show HasLogger Top
 doLogging = Advice
         (Proxy @[String])
         (\args -> do
@@ -219,7 +219,7 @@ weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
 weirdAdvicedEnv =
    env {
          _controller = advise doLogging (_controller env) --,
-         -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
+         -- _controller = advise @Show @(HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
          -- _controller = advise @Show @(HasLogger `EnvAnd` MonadConstraint (MonadWriter TestTrace)) @Top doLogging (_controller env) --,
          -- _logger = advise @(Show `And` Eq) @_ @EnvTop show (\_ -> id) (_logger env)
        }
