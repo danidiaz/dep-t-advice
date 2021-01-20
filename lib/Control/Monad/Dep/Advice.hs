@@ -26,6 +26,8 @@ module Control.Monad.Dep.Advice
     EnvAnd,
     EnvEq,
     MonadConstraint,
+    restrictResult,
+    restrictEnv,
     -- * sop-core re-exports
     Top,
     All,
@@ -276,7 +278,61 @@ restrictResult evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             (let tweakExecutionOuter'' :: forall e m r. (Capable cem e m, more r) => u -> DepT e m r -> DepT e m r 
                  tweakExecutionOuter'' = case evidence' @r of Sub Dict -> \u action -> tweakExecutionOuter' @e @m @r u action
               in tweakExecutionOuter'') 
-        
      in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
     
 
+restrictEnv :: forall more less ca cr . (forall e m . Capable more e m :- Capable less e m) -> Advice ca less cr -> Advice ca more cr
+restrictEnv evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+    let captureExistential ::
+          forall ca more less cr u.
+          (forall e m . Capable more e m :- Capable less e m) -> 
+          Proxy u ->
+          ( forall as e m.
+            (All ca as, Capable less e m) =>
+            NP I as ->
+            DepT e m (u, NP I as)
+          ) ->
+          ( forall e m r.
+            (Capable less e m, cr r) =>
+            u ->
+            DepT e m r ->
+            DepT e m r
+          ) ->
+          Advice ca more cr
+        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+            Advice 
+            (Proxy @u) 
+             (let tweakArgsOuter'' :: forall as e m. (All ca as, Capable more e m) => NP I as -> DepT e m (u, NP I as)
+                  tweakArgsOuter'' = case evidence' @e @m of Sub Dict -> \args -> tweakArgsOuter' @as @e @m args 
+               in tweakArgsOuter'')
+            (let tweakExecutionOuter'' :: forall e m r. (Capable more e m, cr r) => u -> DepT e m r -> DepT e m r 
+                 tweakExecutionOuter'' = case evidence' @e @m of Sub Dict -> \u action -> tweakExecutionOuter' @e @m @r u action
+              in tweakExecutionOuter'') 
+     in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
+
+-- restrictArgs :: forall more less cem cr . (forall r . more r :- less r) -> Advice less cem cr -> Advice more cem cr
+-- restrictArgs evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
+--     let captureExistential ::
+--           forall more less cem cr u.
+--           (forall r . more r :- less r) ->
+--           Proxy u ->
+--           ( forall as e m.
+--             (All less as, Capable cem e m) =>
+--             NP I as ->
+--             DepT e m (u, NP I as)
+--           ) ->
+--           ( forall e m r.
+--             (Capable cem e m, cr r) =>
+--             u ->
+--             DepT e m r ->
+--             DepT e m r
+--           ) ->
+--           Advice more cem cr
+--         captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+--             Advice 
+--             (Proxy @u) 
+--             (let tweakArgsOuter'' :: forall as e m. (All more as, Capable cem e m) => NP I as -> DepT e m (u, NP I as)
+--                  tweakArgsOuter'' = _ 
+--               in tweakArgsOuter'')
+--             tweakExecutionOuter' 
+--      in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
