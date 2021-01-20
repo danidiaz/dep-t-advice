@@ -26,8 +26,6 @@ module Control.Monad.Dep.Advice
     EnvAnd,
     EnvEq,
     MonadConstraint,
-    ArgTop,
-    ResTop,
     -- * sop-core re-exports
     Top,
     All,
@@ -253,24 +251,6 @@ class c m => MonadConstraint c e m
 
 instance c m => MonadConstraint c e m
 
--- |
---    For use in the—likely very rare—case in which `advise` needs two
---    constraints on the advisee's arguments.
--- class (f x, g x) => (f `ArgAnd` g) x
--- instance (f x, g x) => (f `ArgAnd` g) x
-
--- infixl 7 `ArgAnd`
-
--- type ArgTop x = Top x
-
--- type ArgAnd f g = And f g
--- infixl 7 `ArgAnd`
-
--- type ResTop x = Top x
-
--- type ResAnd f g = And f g
--- infixl 7 `ResAnd`
-
 restrictRes :: forall more less ca cem . (forall r . more r :- less r) -> Advice ca cem less -> Advice ca cem more
 restrictRes evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) = 
     let captureExistential ::
@@ -289,8 +269,14 @@ restrictRes evidence (Advice proxy tweakArgsOuter tweakExecutionOuter) =
             DepT e m r
           ) ->
           Advice ca cem more
-        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = Advice (Proxy @u) tweakArgsOuter' 
-            (\u action -> _)
+        captureExistential evidence' _ tweakArgsOuter' tweakExecutionOuter' = 
+            Advice 
+            (Proxy @u) 
+            tweakArgsOuter' 
+            (let tweakExecutionOuter'' :: forall e m r. (Capable cem e m, more r) => u -> DepT e m r -> DepT e m r 
+                 tweakExecutionOuter'' = case evidence' @r of Sub Dict -> \u action -> tweakExecutionOuter' @e @m @r u action
+              in tweakExecutionOuter'') 
+        
      in captureExistential evidence proxy tweakArgsOuter tweakExecutionOuter  
     
 
