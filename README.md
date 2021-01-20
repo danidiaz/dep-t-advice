@@ -24,14 +24,58 @@ Stuff like:
 
 - Logging
 - Caching
+- Monitoring
 - Setting up transaction boundaries.
-- Setting up exception handlers.
+- Some form of interactive debugging.
 
 But how will you go about it?
 
-### The perfectly reasonable and simple solution
+### A perfectly simple and reasonable solution
+
+Imagine that you want to make this function print its argument to stdout:
+
+    foo :: Int -> DepT e IO () 
+
+Easy enough:
+
+    foo' :: Int -> DepT e IO ()
+    foo' arg1 = do
+        liftIO $ putStrLn (show arg1)
+        foo arg1
+
+You can even write your own general "printArgs" combinator:
+
+    printArgs :: Show a => (a -> DepT e IO ()) -> (a -> DepT e IO ())
+    printArgs f arg1 = do
+        liftIO $ putStrLn (show arg1)
+        f arg1
+
+You could wrap `foo` in `printArgs` when constructing the record-of-functions,
+or perhaps you could modify the corresponding field after the record had been
+constructed.
+
+This solution works, and is easy to understand. There's an annoyance though:
+you need a different version of `printArgs` for each number of arguments a
+function might have.
+
+And if you want to compose different combinators (say, `printArgs` and
+`printResult`) before applying them to functions, you need a composition
+combinator specific for each number of arguments.
 
 ### The solution using "advices"
+
+The `Advice` datatype provided by this package encapsulates a transformation on
+`DepT`-effectful functions, *in a way that is polymorphic over the number of
+arguments*. The same advice will work for functions with `0`, `1` or `N`
+arguments.
+
+Advice values are parameterized by the constraints they require of the function:
+
+    - The function arguments. "All the arguments must be showable".
+    - The `DepT` environment and the base monad. "The environment must have a
+      logger, and the base monad must have a `MonadIO` instance."
+    - The function return type. "The function must return a type that is a
+      `Monoid`."
 
 ## Links
 
@@ -40,6 +84,7 @@ But how will you go about it?
   and [Spring AOP
   APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api).
 
-- [Using the “constraints” package to make a wrapped function less polymorphic](https://stackoverflow.com/questions/65800809/using-the-constraints-package-to-make-a-wrapped-function-less-polymorphic)
+- [Using the “constraints” package to make a wrapped function less
+  polymorphic](https://stackoverflow.com/questions/65800809/using-the-constraints-package-to-make-a-wrapped-function-less-polymorphic)
 
 
