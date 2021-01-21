@@ -105,6 +105,21 @@ The `@Top` type application is necessary because `printArgs` is polymorphic on
 the `cr` constraint on the function results, and the `advise` function requires
 all the constraints to be "concrete" in order to apply the advice. 
 
+## Advice should be added at the composition root
+
+It's worth emphasizing that advices should be applied at the ["composition
+root"](https://stackoverflow.com/questions/6277771/what-is-a-composition-root-in-the-context-of-dependency-injection),
+the place in our application in which all the disparate functions are assembled
+and we commit to a concrete monad, namely `DepT`.
+
+Before being brought into the composition root, the functions need not be aware
+that `DepT` exists. They might be working in some generic `MonadReader`
+environment, plus some constraints on that environment.
+
+Once we decide to use `DepT`, we can apply the advice, because advice only
+works on functions that end on a `DepT` action. Also, advice might depend on
+the full gamut of functionality stored in the environment.
+
 ## Links
 
 - [Aspect Oriented Programming with
@@ -114,5 +129,9 @@ all the constraints to be "concrete" in order to apply the advice.
 
 - [Using the “constraints” package to make a wrapped function less
   polymorphic](https://stackoverflow.com/questions/65800809/using-the-constraints-package-to-make-a-wrapped-function-less-polymorphic)
+
+- [Dependency Injection Principles, Practices, and
+  Patterns](https://www.goodreads.com/book/show/44416307-dependency-injection-principles-practices-and-patterns)
+  This is a good book on the general princples of DI. 
 
 
