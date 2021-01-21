@@ -70,7 +70,7 @@ The `Advice` datatype provided by this package encapsulates a transformation on
 arguments*. The same advice will work for functions with `0`, `1` or `N`
 arguments.
 
-Advice values are parameterized by the constraints they require of the function:
+Advices are parameterized by the constraints they require of the function:
 
 - The function arguments. "All the arguments must be showable".
 - The `DepT` environment and the base monad. "The environment must have a
