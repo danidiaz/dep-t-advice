@@ -105,7 +105,7 @@ The `@Top` type application is necessary because `printArgs` is polymorphic on
 the `cr` constraint on the function results, and the `advise` function requires
 all the constraints to be "concrete" in order to apply the advice. 
 
-## Advice should be added at the composition root
+## Advices should be applied at the composition root
 
 It's worth emphasizing that advices should be applied at the ["composition
 root"](https://stackoverflow.com/questions/6277771/what-is-a-composition-root-in-the-context-of-dependency-injection),
