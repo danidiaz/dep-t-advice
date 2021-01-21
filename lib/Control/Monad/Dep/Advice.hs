@@ -436,7 +436,7 @@ instance c m => BaseConstraint c e m
 --
 --
 -- type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
--- type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+-- type HasLoggerAndWriter = HasLogger \`EnvAnd\` BaseConstraint (MonadWriter TestTrace)
 --
 -- doLogging':: Advice Show HasLoggerAndWriter cr
 -- doLogging'= restrictEnv (Sub Dict) doLogging
