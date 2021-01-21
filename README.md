@@ -78,6 +78,28 @@ Advice values are parameterized by the constraints they require of the function:
     - The function return type. "The function must return a type that is a
       `Monoid`."
 
+Here's how a `printArgs` advice might be defined:
+
+    printArgs :: Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
+    printArgs h prefix =
+      makeArgsAdvice
+        ( \args -> do
+            liftIO $ hPutStr h prefix
+            hctraverse_ (Proxy @Show) (\(I a) -> liftIO (hPutStr h (" " ++ show a))) args
+            liftIO $ hFlush h
+            pure args
+        )
+
+The definition is a bit more involved than with plain functions, because the
+arguments are received in an [n-ary
+product](http://hackage.haskell.org/package/sop-core-0.5.0.1/docs/Data-SOP-NP.html#t:NP)
+form [sop-core](http://hackage.haskell.org/package/sop-core-0.5.0.1). But this
+definition works for any number of parameters.
+
+The advice would be applied like this:
+
+    advise @_ @_ @Top printArgs foo
+
 ## Links
 
 - [Aspect Oriented Programming with
