@@ -32,7 +32,7 @@ printArgs :: Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
 printArgs h prefix =
   makeArgsAdvice
     ( \args -> do
-        liftIO $ hPutStr h prefix
+        liftIO $ hPutStr h $ prefix ++ ":"
         hctraverse_ (Proxy @Show) (\(I a) -> liftIO (hPutStr h (" " ++ show a))) args
         liftIO $ hFlush h
         pure args
