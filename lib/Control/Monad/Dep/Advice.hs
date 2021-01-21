@@ -71,6 +71,18 @@ import Data.SOP
 import Data.SOP.Dict qualified as SOP
 import Data.SOP.NP
 
+{- $setup
+ 
+>>> :set -XTypeApplications 
+>>> import Control.Monad.Dep
+>>> import Data.Constraint
+>>> import Data.Kind
+>>> import Data.SOP
+>>> import Data.SOP.NP
+
+-}
+
+
 -- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the function satisfies certain constraints on the
 -- arguments, the environment datatype and base monad, and the return type.
