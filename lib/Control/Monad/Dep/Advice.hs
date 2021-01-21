@@ -487,9 +487,9 @@ instance c m => BaseConstraint c e m
 --    normal functions—'Advice' constaints aren't automatically "collected"
 --    during composition.
 --
---    We need to harmonize the constraints on each value by turning them into the
---    combination of all constraints. The functions in this section help with
---    that.
+--    We need to harmonize the constraints on each 'Advice' by turning them
+--    into the combination of all constraints. The functions in this section
+--    help with that.
 --
 --    These functions take as parameter evidence of entailment between
 --    constraints, using the type '(:-)' from the \"constraints\" package.  But
@@ -499,11 +499,11 @@ instance c m => BaseConstraint c e m
 -- @
 -- returnMempty :: Advice ca cem Monoid
 --
--- returnMempty' :: Advice ca cem (Monoid `And` Show)
+-- returnMempty' :: Advice ca cem (Monoid \`And\` Show)
 -- returnMempty' = restrictResult (Sub Dict) returnMempty
 -- @
 --
--- or a type application to the restriction function:
+-- or with a type application to the restriction function:
 --
 -- @
 -- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
@@ -513,7 +513,6 @@ instance c m => BaseConstraint c e m
 --
 -- @
 -- doLogging :: Advice Show HasLogger cr
---
 --
 -- type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
 -- type HasLoggerAndWriter = HasLogger \`EnvAnd\` BaseConstraint (MonadWriter TestTrace)
@@ -668,11 +667,11 @@ translateEvidence evidence SOP.Dict =
 --
 -- 'I' is an identity functor.
 --
--- 'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example
+-- 'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example:
 --
--- @
--- cfoldMap_NP (Proxy @Show) (\\(I a) -> [show a])
--- @
+-- >>> cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) (I False :* I (1::Int) :* Nil)
+-- ["False","1"]
+--
 
 -- $constraints
 --
