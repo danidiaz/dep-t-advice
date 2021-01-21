@@ -23,6 +23,18 @@
 --
 -- 'Advice's represent generic transformations on 'DepT'-effectful functions of
 -- any number of arguments.
+--
+-- >>> :{ 
+--      type Env :: (Type -> Type) -> Type  -- a trivial evironment 
+--      data Env m = Env 
+--      foo0 :: DepT Env IO Int
+--      foo0 = do { liftIO $ putStrLn "foo" ; return 5 }
+--      foo1 :: Int -> DepT Env IO Int
+--      foo1 _ = foo0
+--      foo2 :: Int -> Int -> DepT Env IO Int
+--      foo2 _ = foo1
+--      :}
+--
 module Control.Monad.Dep.Advice
   ( -- * The Advice type
     Advice,
@@ -73,8 +85,12 @@ import Data.SOP.NP
 
 {- $setup
  
->>> :set -XTypeApplications 
+>>> :set -XTypeApplications -XStandaloneKindSignatures
+>>> import Control.Monad
+>>> import Control.Monad.IO.Class
 >>> import Control.Monad.Dep
+>>> import Control.Monad.Dep.Advice
+>>> import Control.Monad.Dep.Advice.Basic
 >>> import Data.Constraint
 >>> import Data.Kind
 >>> import Data.SOP
