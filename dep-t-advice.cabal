@@ -52,14 +52,13 @@ test-suite tests
                        tasty-hunit        >= 0.10.0.2,
 
 -- http://hackage.haskell.org/package/cabal-doctest
---
--- test-suite doctests
---   import:              common-tests
---   ghc-options:         -threaded
---   type:                exitcode-stdio-1.0
---   hs-source-dirs:      test
---   main-is:             doctests.hs
---   build-depends:       
---                        doctests           ^>= 0.17 
---                        
--- 
+test-suite doctests
+  import:              common-tests
+  ghc-options:         -threaded
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             doctests.hs
+  build-depends:       
+                       doctest            ^>= 0.17 
+                       
+
