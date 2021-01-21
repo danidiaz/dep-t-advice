@@ -309,8 +309,9 @@ type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
 --
--- If the @ca@, @cem@ or @cr@ constraints of the supplied 'Advice' remain
--- polymorphic, they must be given types by means of type applications.
+-- __/IMPORTANT!/__ If the @ca@, @cem@ or @cr@ constraints of the supplied
+-- 'Advice' remain polymorphic, they must be given types by means of type
+-- applications.
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
