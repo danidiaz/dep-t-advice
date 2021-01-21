@@ -72,11 +72,11 @@ arguments.
 
 Advice values are parameterized by the constraints they require of the function:
 
-    - The function arguments. "All the arguments must be showable".
-    - The `DepT` environment and the base monad. "The environment must have a
-      logger, and the base monad must have a `MonadIO` instance."
-    - The function return type. "The function must return a type that is a
-      `Monoid`."
+- The function arguments. "All the arguments must be showable".
+- The `DepT` environment and the base monad. "The environment must have a
+  logger, and the base monad must have a `MonadIO` instance."
+- The function return type. "The function must return a type that is a
+  `Monoid`."
 
 Here's how a `printArgs` advice might be defined:
 
