@@ -27,6 +27,15 @@ common common
                        dep-t ^>= 0.1.0.0
   default-language:    Haskell2010
 
+common common-tests
+  import:              common
+  build-depends:       
+                       dep-t-advice, 
+                       rank2classes       ^>= 1.4.1,
+                       transformers       ^>= 0.5.0.0,
+                       mtl                ^>= 2.2,
+                       template-haskell,
+
 library
   import: common
   exposed-modules:     Control.Monad.Dep.Advice
@@ -34,16 +43,19 @@ library
   hs-source-dirs:      lib 
 
 test-suite dep-t-advice-test
-  import: common
+  import:              common-tests
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             tests.hs
   build-depends:       
-    dep-t, 
-    dep-t-advice, 
-    rank2classes       ^>= 1.4.1,
-    transformers       ^>= 0.5.0.0,
-    mtl                ^>= 2.2,
-    template-haskell,
     tasty              >= 1.3.1,
     tasty-hunit        >= 0.10.0.2,
+
+-- test-suite doctests
+--   import:              common
+--   type:                exitcode-stdio-1.0
+--   hs-source-dirs:      tests
+--   main-is:             doctests.hs
+--   build-depends:       
+--   default-language:    Haskell2010
+
