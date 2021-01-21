@@ -17,24 +17,74 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 
--- |
--- This package provices the 'Advice' datatype, along for functions for creating,
--- manipulating, composing and applying values of that type.
---
--- 'Advice's represent generic transformations on 'DepT'-effectful functions of
--- any number of arguments.
---
--- >>> :{ 
---      type Env :: (Type -> Type) -> Type  -- a trivial evironment 
---      data Env m = Env 
---      foo0 :: DepT Env IO Int
---      foo0 = do { liftIO $ putStrLn "foo" ; return 5 }
---      foo1 :: Int -> DepT Env IO Int
---      foo1 _ = foo0
---      foo2 :: Int -> Int -> DepT Env IO Int
---      foo2 _ = foo1
---      :}
---
+{-|
+    This package provices the 'Advice' datatype, along for functions for creating,
+    manipulating, composing and applying values of that type.
+
+    'Advice's represent generic transformations on 'DepT'-effectful functions of
+    any number of arguments.
+
+>>> :{
+    type Env :: (Type -> Type) -> Type -- a trivial environment without functions
+    data Env m = Env
+    env :: Env (DepT Env IO) 
+    env = Env
+    foo0 :: DepT Env IO (Sum Int)  
+    foo0 = pure (Sum 5)
+    foo1 :: Bool -> DepT Env IO (Sum Int)
+    foo1 _ = foo0
+    foo2 :: Char -> Bool -> DepT Env IO (Sum Int)
+    foo2 _ = foo1
+:}
+
+They work for @DepT@-actions of zero arguments:
+
+>>> :{
+    let action = advise (printArgs @Top stdout "foo0") foo0
+     in runDepT action env
+:}
+foo0:
+<BLANKLINE>
+Sum {getSum = 5}
+
+And for functions of one or more arguments, provided they end on a @DepT@-action:
+
+>>> :{ 
+    let action = advise (printArgs @Top stdout "foo1") foo1 False
+     in runDepT action env
+:}
+foo1: False
+<BLANKLINE>
+Sum {getSum = 5}
+
+>>> :{
+    let action = advise (printArgs @Top stdout "foo2") foo2 'd' False
+     in runDepT action env
+:}
+foo2: 'd' False 
+<BLANKLINE>
+Sum {getSum = 5}
+
+'Advice's can also tweak the result value of functions:
+
+>>> :{
+    let action = advise (returnMempty @Top @EnvTop) foo2 'd' False
+     in runDepT action env
+:}
+Sum {getSum = 0}
+
+And they can be combined using @Advice@'s 'Monoid' instance before being applied
+(although that might require harmonizing their constraint parameters):
+
+>>> :{
+    let action = advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
+     in runDepT action env
+:}
+foo2: 'd' False 
+<BLANKLINE>
+Sum {getSum = 0}
+
+-}
 module Control.Monad.Dep.Advice
   ( -- * The Advice type
     Advice,
@@ -90,11 +140,13 @@ import Data.SOP.NP
 >>> import Control.Monad.IO.Class
 >>> import Control.Monad.Dep
 >>> import Control.Monad.Dep.Advice
->>> import Control.Monad.Dep.Advice.Basic
+>>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty) 
 >>> import Data.Constraint
 >>> import Data.Kind
 >>> import Data.SOP
 >>> import Data.SOP.NP
+>>> import Data.Monoid
+>>> import System.IO
 
 -}
 
@@ -109,15 +161,15 @@ import Data.SOP.NP
 -- * @cem@ of kind @Type -> (Type -> Type) -> Constraint@, the constraint required of the 'DepT'-environment / base monad combination (usually something like @HasLogger@).
 -- * @cr@ of kind @Type -> Constraint@, the constraint required of the return type.
 --
--- We can constrain the 'Advice' to work with concrete types by using partially
+-- We can define 'Advice's that work with concrete types by using partially
 -- applied equality constraints in the case of @ca@ and @cr@, and 'EnvEq' in
 -- the case of @cem@.
 --
 -- 'Advice's that don't care about a particular constraint can leave it
 -- polymorphic, and this facilitates composition, but the constraint must be
 -- given some concrete value ('Top' in the case of @ca@ and @cr@, 'EnvTop' in
--- the case of @cem@) through type application at the moment of applying the
--- 'Advice' with 'advise'.
+-- the case of @cem@) through type application at the moment of calling
+-- 'advise'.
 type Advice ::
   (Type -> Constraint) ->
   (Type -> (Type -> Type) -> Constraint) ->

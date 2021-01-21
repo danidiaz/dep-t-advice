@@ -80,25 +80,30 @@ Advice values are parameterized by the constraints they require of the function:
 
 Here's how a `printArgs` advice might be defined:
 
-    printArgs :: Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
+    printArgs :: forall cr. Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
     printArgs h prefix =
       makeArgsAdvice
         ( \args -> do
-            liftIO $ hPutStr h prefix
+            liftIO $ hPutStr h $ prefix ++ ":"
             hctraverse_ (Proxy @Show) (\(I a) -> liftIO (hPutStr h (" " ++ show a))) args
+            liftIO $ hPutStrLn h "\n"
             liftIO $ hFlush h
             pure args
         )
 
-The definition is a bit more involved than with plain functions, because the
-arguments are received in an [n-ary
+The advice receives the arguments of the function in the form of an [n-ary
 product](http://hackage.haskell.org/package/sop-core-0.5.0.1/docs/Data-SOP-NP.html#t:NP)
-form [sop-core](http://hackage.haskell.org/package/sop-core-0.5.0.1). But this
-definition works for any number of parameters.
+from [sop-core](http://hackage.haskell.org/package/sop-core-0.5.0.1). But it
+must be polymorphic on the shape of the type-level list which indexes the
+product. This makes the advice work for any number of parameters.
 
 The advice would be applied like this:
 
-    advise @_ @_ @Top printArgs foo
+    advise (printArgs @Top stdout "foo args: ") foo
+
+The `@Top` type application is necessary because `printArgs` is polymorphic on
+the `cr` constraint on the function results, and the `advise` function requires
+all the constraints to be "concrete" in order to apply the advice. 
 
 ## Links
 
