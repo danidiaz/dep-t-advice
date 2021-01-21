@@ -42,20 +42,22 @@ library
                        Control.Monad.Dep.Advice.Basic
   hs-source-dirs:      lib 
 
-test-suite dep-t-advice-test
+test-suite tests
   import:              common-tests
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             tests.hs
   build-depends:       
-    tasty              >= 1.3.1,
-    tasty-hunit        >= 0.10.0.2,
+                       tasty              >= 1.3.1,
+                       tasty-hunit        >= 0.10.0.2,
 
 -- test-suite doctests
---   import:              common
+--   import:              common-tests
+--   ghc-options:         -threaded
 --   type:                exitcode-stdio-1.0
---   hs-source-dirs:      tests
+--   hs-source-dirs:      test
 --   main-is:             doctests.hs
 --   build-depends:       
---   default-language:    Haskell2010
-
+--                        doctests           ^>= 0.17 
+--                        
+-- 
