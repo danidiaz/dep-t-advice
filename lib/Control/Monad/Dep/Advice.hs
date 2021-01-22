@@ -105,7 +105,6 @@ module Control.Monad.Dep.Advice
     EnvAnd,
     EnvEq,
     BaseConstraint,
-
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -373,7 +372,7 @@ data Pair a b = Pair !a !b
 -- @
 --
 -- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
--- contains a logging function that works in 'DepT' over 'IO'.
+-- contains a logging function that itself works in 'DepT' over 'IO'.
 type Capable ::
   (Type -> (Type -> Type) -> Constraint) ->
   ((Type -> Type) -> Type) ->
@@ -471,10 +470,13 @@ instance (c' ~ c, m' ~ m) => EnvEq c' m' c m
 --    Allows us to require a constraint only on the base monad, for example a base moonad with @MonadIO@.
 --
 --    Useful to build @cem@ type application argument of 'advise' and 'restricEnv'.
-type BaseConstraint :: ((Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
+type BaseConstraint :: ((Type -> Type) -> Constraint) -> Type -> (Type -> Type) -> Constraint
 class c m => BaseConstraint c e m
-
 instance c m => BaseConstraint c e m
+
+-- type BaseConstraintEq :: (Type -> Type) -> Type -> (Type -> Type) -> Constraint
+-- class c ((~) m) => BaseConstraintEq c e m
+-- instance c ((~) m) => BaseConstraintEq c e m
 
 -- $restrict
 --
