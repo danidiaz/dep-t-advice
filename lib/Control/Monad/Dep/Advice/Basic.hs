@@ -27,6 +27,7 @@ where
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Data.Proxy
 import Data.SOP
 import Data.SOP (hctraverse_)
@@ -99,21 +100,20 @@ doBadCaching cacheLookup cachePut =
          in pure (key, args)
     )
     ( \key action -> do
-        mr <- cacheLookup key
+        mr <- lift $ cacheLookup key
         case mr of
           Nothing -> do
             r <- action
-            cachePut key r
+            lift $ cachePut key r
             pure r
           Just r ->
             pure r
     )
 
--- doBadAsync :: Advice ca (BaseConstraint ((~) IO)) ((~) ())
--- --doBadAsync :: forall ca. Advice ca (BaseConstraintEq IO) ((~) ())
--- doBadAsync = makeExecutionAdvice (\action -> do
---         e <- ask 
---         _ <- liftIO $ forkIO $ _ -- runDepT action e
---         pure ()
---     )
+doBadAsync :: Advice ca (BaseConstraint ((~) IO)) ((~) ())
+doBadAsync = makeExecutionAdvice (\action -> do
+        e <- ask 
+        _ <- liftIO $ forkIO $ runDepT action e
+        pure ()
+    )
 

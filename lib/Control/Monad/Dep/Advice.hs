@@ -100,7 +100,7 @@ module Control.Monad.Dep.Advice
     restrictResult,
 
     -- * Constraint helpers
-    Capable,
+    CapableX,
     EnvTop,
     EnvAnd,
     EnvEq,
@@ -167,7 +167,7 @@ import Data.SOP.NP
 -- 'advise'.
 type Advice ::
   (Type -> Constraint) ->
-  (Type -> (Type -> Type) -> Constraint) ->
+  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
   (Type -> Constraint) ->
   Type
 data Advice ca cem cr where
@@ -175,12 +175,12 @@ data Advice ca cem cr where
     forall u ca cem cr.
     Proxy u ->
     ( forall as e m.
-      (All ca as, Capable cem e m) =>
+      (All ca as, cem e m, Monad m) =>
       NP I as ->
       DepT e m (u, NP I as)
     ) ->
     ( forall e m r.
-      (Capable cem e m, cr r) =>
+      (cem e m, Monad m, cr r) =>
       u ->
       DepT e m r ->
       DepT e m r
@@ -199,24 +199,24 @@ instance Semigroup (Advice ca cem cr) where
           forall ca cem cr outer inner.
           Proxy outer ->
           ( forall as e m.
-            (All ca as, Capable cem e m) =>
+            (All ca as, cem e m, Monad m) =>
             NP I as ->
             DepT e m (outer, NP I as)
           ) ->
           ( forall e m r.
-            (Capable cem e m, cr r) =>
+            (cem e m, Monad m, cr r) =>
             outer ->
             DepT e m r ->
             DepT e m r
           ) ->
           Proxy inner ->
           ( forall as e m.
-            (All ca as, Capable cem e m) =>
+            (All ca as, cem e m, Monad m) =>
             NP I as ->
             DepT e m (inner, NP I as)
           ) ->
           ( forall e m r.
-            (Capable cem e m, cr r) =>
+            (cem e m, Monad m, cr r) =>
             inner ->
             DepT e m r ->
             DepT e m r
@@ -227,7 +227,7 @@ instance Semigroup (Advice ca cem cr) where
             (Proxy @(Pair outer inner))
             ( let tweakArgs ::
                     forall as e m.
-                    (All ca as, Capable cem e m) =>
+                    (All ca as, cem e m, Monad m) =>
                     NP I as ->
                     DepT e m (Pair outer inner, NP I as)
                   tweakArgs args =
@@ -239,7 +239,7 @@ instance Semigroup (Advice ca cem cr) where
             )
             ( let tweakExecution ::
                     forall e m r.
-                    (Capable cem e m, cr r) =>
+                    (cem e m, Monad m, cr r) =>
                     Pair outer inner ->
                     DepT e m r ->
                     DepT e m r
@@ -276,13 +276,13 @@ makeAdvice ::
   forall u ca cem cr.
   -- | The function that tweaks the arguments.
   ( forall as e m.
-    (All ca as, Capable cem e m) =>
+    (All ca as, cem e m, Monad m) =>
     NP I as ->
     DepT e m (u, NP I as)
   ) ->
   -- | The function that tweaks the execution.
   ( forall e m r.
-    (Capable cem e m, cr r) =>
+    (cem e m, Monad m, cr r) =>
     u ->
     DepT e m r ->
     DepT e m r
@@ -298,7 +298,7 @@ makeArgsAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the arguments.
   ( forall as e m.
-    (All ca as, Capable cem e m) =>
+    (All ca as, cem e m, Monad m) =>
     NP I as ->
     DepT e m (NP I as)
   ) ->
@@ -319,7 +319,7 @@ makeExecutionAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the execution.
   ( forall e m r.
-    (Capable cem e m, cr r) =>
+    (cem e m, Monad m, cr r) =>
     DepT e m r ->
     DepT e m r
   ) ->
@@ -373,13 +373,9 @@ data Pair a b = Pair !a !b
 --
 -- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
 -- contains a logging function that itself works in 'DepT' over 'IO'.
-type Capable ::
-  (Type -> (Type -> Type) -> Constraint) ->
-  ((Type -> Type) -> Type) ->
-  (Type -> Type) ->
-  Constraint
-
-type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
+type CapableX :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class c (e (DepT e m)) (DepT e m) => CapableX c e m 
+instance c (e (DepT e m)) (DepT e m) => CapableX c e m
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
@@ -389,7 +385,7 @@ type Capable c e m = (c (e (DepT e m)) (DepT e m), Monad m)
 -- applications.
 advise ::
   forall ca cem cr as e m r advisee.
-  (Multicurryable as e m r advisee, All ca as, Capable cem e m, cr r) =>
+  (Multicurryable as e m r advisee, All ca as, cem e m, Monad m, cr r) =>
   -- | The advice to apply.
   Advice ca cem cr ->
   -- | A function to be adviced.
@@ -428,7 +424,7 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'Top' from \"sop-core\".
-type EnvTop :: (Type -> (Type -> Type) -> Constraint)
+type EnvTop :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class EnvTop e m
 
 instance EnvTop e m
@@ -444,7 +440,9 @@ instance EnvTop e m
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'And' from \"sop-core\".
-type EnvAnd :: (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint) -> (Type -> (Type -> Type) -> Constraint)
+type EnvAnd :: (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) 
+            -> (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) 
+            -> (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint)
 class (f e m, g e m) => (f `EnvAnd` g) e m
 
 instance (f e m, g e m) => (f `EnvAnd` g) e m
@@ -461,16 +459,16 @@ infixl 7 `EnvAnd`
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use a partially applied type equality, like @((~) Int)@.
-type EnvEq :: Type -> (Type -> Type) -> Type -> (Type -> Type) -> Constraint
-class (c' ~ c, m' ~ m) => EnvEq c' m' c m
+type EnvEq :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class (e' ~ e, m' ~ m) => EnvEq e' m' e m
 
-instance (c' ~ c, m' ~ m) => EnvEq c' m' c m
+instance (e' ~ e, m' ~ m) => EnvEq e' m' e m
 
 -- |
 --    Allows us to require a constraint only on the base monad, for example a base moonad with @MonadIO@.
 --
 --    Useful to build @cem@ type application argument of 'advise' and 'restricEnv'.
-type BaseConstraint :: ((Type -> Type) -> Constraint) -> Type -> (Type -> Type) -> Constraint
+type BaseConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c m => BaseConstraint c e m
 instance c m => BaseConstraint c e m
 
@@ -547,12 +545,12 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
         (forall r. more r :- less r) ->
         Proxy u ->
         ( forall as e m.
-          (All less as, Capable cem e m) =>
+          (All less as, cem e m, Monad m) =>
           NP I as ->
           DepT e m (u, NP I as)
         ) ->
         ( forall e m r.
-          (Capable cem e m, cr r) =>
+          (cem e m, Monad m, cr r) =>
           u ->
           DepT e m r ->
           DepT e m r
@@ -561,7 +559,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
       captureExistential evidence' _ tweakArgs' tweakExecution' =
         Advice
           (Proxy @u)
-          ( let tweakArgs'' :: forall as e m. (All more as, Capable cem e m) => NP I as -> DepT e m (u, NP I as)
+          ( let tweakArgs'' :: forall as e m. (All more as, cem e m, Monad m) => NP I as -> DepT e m (u, NP I as)
                 tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
                   f -> case f (SOP.Dict @(All more) @as) of
                     SOP.Dict -> \args -> tweakArgs' @as @e @m args
@@ -575,7 +573,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
 restrictEnv ::
   forall more ca less cr.
   -- | Evidence that one constraint implies the other.
-  (forall e m. Capable more e m :- Capable less e m) ->
+  (forall e m. more e m :- less e m) ->
   -- | Advice with less restrictive constraint on the environment and base monad.
   Advice ca less cr ->
   -- | Advice with more restrictive constraint on the environment and base monad.
@@ -583,15 +581,15 @@ restrictEnv ::
 restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more ca less cr u.
-        (forall e m. Capable more e m :- Capable less e m) ->
+        (forall e m. more e m :- less e m) ->
         Proxy u ->
         ( forall as e m.
-          (All ca as, Capable less e m) =>
+          (All ca as, less e m, Monad m) =>
           NP I as ->
           DepT e m (u, NP I as)
         ) ->
         ( forall e m r.
-          (Capable less e m, cr r) =>
+          (less e m, Monad m, cr r) =>
           u ->
           DepT e m r ->
           DepT e m r
@@ -600,11 +598,11 @@ restrictEnv evidence (Advice proxy tweakArgs tweakExecution) =
       captureExistential evidence' _ tweakArgs' tweakExecution' =
         Advice
           (Proxy @u)
-          ( let tweakArgs'' :: forall as e m. (All ca as, Capable more e m) => NP I as -> DepT e m (u, NP I as)
+          ( let tweakArgs'' :: forall as e m. (All ca as, more e m, Monad m) => NP I as -> DepT e m (u, NP I as)
                 tweakArgs'' = case evidence' @e @m of Sub Dict -> \args -> tweakArgs' @as @e @m args
              in tweakArgs''
           )
-          ( let tweakExecution'' :: forall e m r. (Capable more e m, cr r) => u -> DepT e m r -> DepT e m r
+          ( let tweakExecution'' :: forall e m r. (more e m, Monad m, cr r) => u -> DepT e m r -> DepT e m r
                 tweakExecution'' = case evidence' @e @m of Sub Dict -> \u action -> tweakExecution' @e @m @r u action
              in tweakExecution''
           )
@@ -626,12 +624,12 @@ restrictResult evidence (Advice proxy tweakArgs tweakExecution) =
         (forall r. more r :- less r) ->
         Proxy u ->
         ( forall as e m.
-          (All ca as, Capable cem e m) =>
+          (All ca as, cem e m, Monad m) =>
           NP I as ->
           DepT e m (u, NP I as)
         ) ->
         ( forall e m r.
-          (Capable cem e m, less r) =>
+          (cem e m, Monad m, less r) =>
           u ->
           DepT e m r ->
           DepT e m r
@@ -641,7 +639,7 @@ restrictResult evidence (Advice proxy tweakArgs tweakExecution) =
         Advice
           (Proxy @u)
           tweakArgs'
-          ( let tweakExecution'' :: forall e m r. (Capable cem e m, more r) => u -> DepT e m r -> DepT e m r
+          ( let tweakExecution'' :: forall e m r. (cem e m, Monad m, more r) => u -> DepT e m r -> DepT e m r
                 tweakExecution'' = case evidence' @r of Sub Dict -> \u action -> tweakExecution' @e @m @r u action
              in tweakExecution''
           )

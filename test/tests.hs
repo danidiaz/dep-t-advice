@@ -199,7 +199,7 @@ emptyResult = makeAdvice @()
     (\() action -> do _ <- action
                       pure mempty)
 
-doLogging :: Advice Show HasLogger cr
+doLogging :: Advice Show (CapableX HasLogger) cr
 doLogging = makeAdvice @()
         (\args -> do
             e <- ask
@@ -230,8 +230,8 @@ weirdAdvicedEnv =
          _logger = advise @(Show `And` Eq) @EnvTop @Monoid (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
        }
 
-type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
-type HasLoggerAndWriter = HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+type HasLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+type HasLoggerAndWriter = CapableX HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
 
 -- to ways to invoke restrict functions
 doLogging':: Advice Show HasLoggerAndWriter cr
