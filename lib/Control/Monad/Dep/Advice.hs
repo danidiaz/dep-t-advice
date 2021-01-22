@@ -25,15 +25,11 @@
     any number of arguments.
 
 >>> :{
-    type Env :: (Type -> Type) -> Type -- a trivial environment without functions
-    data Env m = Env
-    env :: Env (DepT Env IO) 
-    env = Env
-    foo0 :: DepT Env IO (Sum Int)  
+    foo0 :: DepT NilEnv IO (Sum Int)  
     foo0 = pure (Sum 5)
-    foo1 :: Bool -> DepT Env IO (Sum Int)
+    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
     foo1 _ = foo0
-    foo2 :: Char -> Bool -> DepT Env IO (Sum Int)
+    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
     foo2 _ = foo1
 :}
 
@@ -41,7 +37,7 @@ They work for @DepT@-actions of zero arguments:
 
 >>> :{
     let action = advise (printArgs @Top stdout "foo0") foo0
-     in runDepT action env
+     in runDepT action NilEnv
 :}
 foo0:
 <BLANKLINE>
@@ -51,7 +47,7 @@ And for functions of one or more arguments, provided they end on a @DepT@-action
 
 >>> :{ 
     let action = advise (printArgs @Top stdout "foo1") foo1 False
-     in runDepT action env
+     in runDepT action NilEnv
 :}
 foo1: False
 <BLANKLINE>
@@ -59,7 +55,7 @@ Sum {getSum = 5}
 
 >>> :{
     let action = advise (printArgs @Top stdout "foo2") foo2 'd' False
-     in runDepT action env
+     in runDepT action NilEnv
 :}
 foo2: 'd' False 
 <BLANKLINE>
@@ -69,7 +65,7 @@ Sum {getSum = 5}
 
 >>> :{
     let action = advise (returnMempty @Top @EnvTop) foo2 'd' False
-     in runDepT action env
+     in runDepT action NilEnv
 :}
 Sum {getSum = 0}
 
@@ -78,7 +74,7 @@ And they can be combined using @Advice@'s 'Monoid' instance before being applied
 
 >>> :{
     let action = advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
-     in runDepT action env
+     in runDepT action NilEnv
 :}
 foo2: 'd' False 
 <BLANKLINE>
