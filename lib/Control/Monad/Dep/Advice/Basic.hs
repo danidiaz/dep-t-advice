@@ -19,7 +19,8 @@ module Control.Monad.Dep.Advice.Basic
     returnMempty,
     printArgs,
     AnyEq (..),
-    doCachingBadly
+    doCachingBadly,
+    doAsyncBadly
   )
 where
 
@@ -117,7 +118,7 @@ doCachingBadly cacheLookup cachePut =
 -- A better implementation of this advice would likely use the \"async\"
 -- package instead of bare `forkIO`. 
 --
--- And the @((~) IO)@ constraint could be relaxed to @MonadUnliftIO@.
+-- And the @MustBe IO@ constraint could be relaxed to @MonadUnliftIO@.
 doAsyncBadly :: Advice ca (MonadConstraint (MustBe IO)) (MustBe ())
 doAsyncBadly = makeExecutionAdvice (\action -> do
         e <- ask 
