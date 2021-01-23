@@ -137,7 +137,14 @@ import Data.SOP.NP
 
 -- $setup
 --
--- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies -XRankNTypes -XTypeOperators -XConstraintKinds
+-- >>> :set -XTypeApplications 
+-- >>> :set -XStandaloneKindSignatures 
+-- >>> :set -XMultiParamTypeClasses 
+-- >>> :set -XFunctionalDependencies 
+-- >>> :set -XRankNTypes 
+-- >>> :set -XTypeOperators 
+-- >>> :set -XConstraintKinds 
+-- >>> :set -XNamedFieldPuns
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
@@ -148,6 +155,7 @@ import Data.SOP.NP
 -- >>> import Data.SOP.NP
 -- >>> import Data.Monoid
 -- >>> import System.IO
+-- >>> import Data.IORef
 
 -- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the function satisfies certain constraints on the
@@ -421,39 +429,68 @@ type Multicurryable ::
   Type ->
   Constraint
 class Multicurryable as e m r curried | curried -> as e m r where
-  type EndingInTheBaseMonad as e m r curried :: Type
+  type BaseMonadAtTheTip as e m r curried :: Type
   multiuncurry :: curried -> NP I as -> DepT e m r
   multicurry :: (NP I as -> DepT e m r) -> curried
-  _runFromEnv :: (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+  _runFromEnv ::  m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
 
 instance Monad m => Multicurryable '[] e m r (DepT e m r) where
-  type EndingInTheBaseMonad '[] e m r (DepT e m r) = m r
+  type BaseMonadAtTheTip '[] e m r (DepT e m r) = m r
   multiuncurry action Nil = action
   multicurry f = f Nil
-  _runFromEnv extractor eaction = do
-    e <- eaction
+  _runFromEnv producer extractor = do
+    e <- producer
     runDepT (extractor e) e
 
 instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
-  type EndingInTheBaseMonad (a ': as) e m r (a -> curried) = a -> EndingInTheBaseMonad as e m r curried
+  type BaseMonadAtTheTip (a ': as) e m r (a -> curried) = a -> BaseMonadAtTheTip as e m r curried
   multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
-  _runFromEnv extractor eaction a = _runFromEnv @as @e @m @r @curried (\f -> extractor f a) eaction
+  _runFromEnv producer extractor a = _runFromEnv @as @e @m @r @curried producer (\f -> extractor f a)
 
--- | Run the 'DepT' transformer at the end of a curried function, using an
--- environment obtained from an action in the base monad.
+-- | Given a base monad @m@ action that gets hold of the 'DepT' environment, run
+-- the 'DepT' transformer at the tip of a curried function.
 --
 -- >>> :{ 
 --  foo :: Int -> Int -> Int -> DepT NilEnv IO ()
 --  foo _ _ _ = pure ()
 -- :}
 --
---  >>> runFinalDepT foo (pure NilEnv) 1 2 3 :: IO ()
+--  >>> runFinalDepT (pure NilEnv) foo 1 2 3 :: IO ()
 --
-runFinalDepT :: forall as e m r curried . Multicurryable as e m r curried => curried -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
-runFinalDepT extractor = _runFromEnv (const extractor)
+runFinalDepT :: forall as e m r curried . Multicurryable as e m r curried => m (e (DepT e m)) -> curried -> BaseMonadAtTheTip as e m r curried
+runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 
-runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+-- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
+-- and a function capable of extracting a curried function from the
+-- environment, run the 'DepT' transformer at the tip of the resulting curried
+-- function.
+--
+-- Why put the environment behind the @m@ action? Well, since getting to the
+-- end of the curried function takes some work, it's a good idea to have some
+-- flexibility once we arrive there. For example, the environment could be
+-- stored in a "Data.IORef" and change in response to events, perhaps with
+-- advices being added or removed.
+--
+-- >>> :{
+--   type MutableEnv :: (Type -> Type) -> Type
+--   data MutableEnv m = MutableEnv { _foo :: Int -> m (Sum Int) }
+--   :}
+--
+-- >>> :{
+--   do envRef <- newIORef (MutableEnv (pure . Sum))
+--      let foo' = runFromEnv (readIORef envRef) _foo
+--      do r <- foo' 7
+--         print r
+--      modifyIORef envRef (\e -> e { _foo = advise @Top @Top2 returnMempty (_foo e) })
+--      do r <- foo' 7
+--         print r
+-- :}
+-- Sum {getSum = 7}
+-- Sum {getSum = 0}
+--
+--
+runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
 runFromEnv = _runFromEnv
 
 -- |
