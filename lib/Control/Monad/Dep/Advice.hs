@@ -8,6 +8,7 @@
 {-# LANGUAGE GADTSyntax #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
@@ -16,7 +17,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE PolyKinds #-}
 
 -- |
 --    This package provices the 'Advice' datatype, along for functions for creating,
@@ -36,47 +36,32 @@
 --
 -- They work for @DepT@-actions of zero arguments:
 --
--- >>> :{
---    let action = advise (printArgs @Top stdout "foo0") foo0
---     in runDepT action NilEnv
--- :}
+-- >>> advise (printArgs @Top stdout "foo0") foo0 `runDepT` NilEnv
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- And for functions of one or more arguments, provided they end on a @DepT@-action:
 --
--- >>> :{
---    let action = advise (printArgs @Top stdout "foo1") foo1 False
---     in runDepT action NilEnv
--- :}
+-- >>> advise (printArgs @Top stdout "foo1") foo1 False `runDepT` NilEnv
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> :{
---    let action = advise (printArgs @Top stdout "foo2") foo2 'd' False
---     in runDepT action NilEnv
--- :}
+-- >>> advise (printArgs @Top stdout "foo2") foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> :{
---    let action = advise (returnMempty @Top @Top2) foo2 'd' False
---     in runDepT action NilEnv
--- :}
+-- >>> advise (returnMempty @Top @Top2) foo2 'd' False `runDepT` NilEnv
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being applied
 -- (although that might require harmonizing their constraint parameters):
 --
--- >>> :{
---    let action = advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
---     in runDepT action NilEnv
--- :}
+-- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
@@ -112,6 +97,7 @@ module Control.Monad.Dep.Advice
     -- $invocation
     runFinalDepT,
     runFromEnv,
+
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -137,13 +123,13 @@ import Data.SOP.NP
 
 -- $setup
 --
--- >>> :set -XTypeApplications 
--- >>> :set -XStandaloneKindSignatures 
--- >>> :set -XMultiParamTypeClasses 
--- >>> :set -XFunctionalDependencies 
--- >>> :set -XRankNTypes 
--- >>> :set -XTypeOperators 
--- >>> :set -XConstraintKinds 
+-- >>> :set -XTypeApplications
+-- >>> :set -XStandaloneKindSignatures
+-- >>> :set -XMultiParamTypeClasses
+-- >>> :set -XFunctionalDependencies
+-- >>> :set -XRankNTypes
+-- >>> :set -XTypeOperators
+-- >>> :set -XConstraintKinds
 -- >>> :set -XNamedFieldPuns
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
@@ -285,7 +271,7 @@ instance Monoid (Advice ca cem cr) where
 --    'makeAdvice'. This second argument also receives the summary value of
 --    type @u@ calculated earlier.
 --
--- >>> :{ 
+-- >>> :{
 --  doesNothing :: forall ca cem cr. Advice ca cem cr
 --  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
 -- :}
@@ -293,7 +279,6 @@ instance Monoid (Advice ca cem cr) where
 --    __/IMPORTANT!/__ When invoking 'makeAdvice', you must always give the
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
---
 makeAdvice ::
   forall u ca cem cr.
   -- | The function that tweaks the arguments.
@@ -317,11 +302,10 @@ makeAdvice = Advice (Proxy @u)
 --
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
--- >>> :{ 
+-- >>> :{
 --  doesNothing :: forall ca cem cr. Advice ca cem cr
---  doesNothing = makeArgsAdvice pure 
+--  doesNothing = makeArgsAdvice pure
 -- :}
---
 makeArgsAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the arguments.
@@ -344,11 +328,10 @@ makeArgsAdvice tweakArgs =
 --
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
--- >>> :{ 
+-- >>> :{
 --  doesNothing :: forall ca cem cr. Advice ca cem cr
 --  doesNothing = makeExecutionAdvice id
 -- :}
---
 makeExecutionAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the execution.
@@ -362,14 +345,14 @@ makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) 
 
 data Pair a b = Pair !a !b
 
--- | 
+-- |
 -- 'Ensure' is a helper for lifting typeclass definitions of the form:
 --
--- >>> :{ 
+-- >>> :{
 --  type HasLogger :: Type -> (Type -> Type) -> Constraint
 --  class HasLogger em m | em -> m where
 --    logger :: em -> String -> m ()
--- :} 
+-- :}
 --
 -- To work as the @cem@ constraint, like this:
 --
@@ -383,7 +366,6 @@ data Pair a b = Pair !a !b
 -- But the @cem@ constraint works with the type constructor of the environment
 -- record, of kind @(Type -> Type) -> Type@, and not with the fully applied
 -- type of kind @Type@.
---
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c (e (DepT e m)) (DepT e m) => Ensure c e m
 
@@ -396,7 +378,7 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 -- 'Advice' remain polymorphic, they must be given types by means of type
 -- applications:
 --
--- >>> :{ 
+-- >>> :{
 --  foo :: Int -> DepT NilEnv IO String
 --  foo _ = pure "foo"
 --  advisedFoo1 = advise (returnMempty @Top @Top2) foo
@@ -404,8 +386,6 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 --  advisedFoo3 = advise (printArgs @Top stdout "args: ") foo
 --  advisedFoo4 = advise @_ @_ @Top (printArgs stdout "args: ") foo
 -- :}
---
---
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, cem e m, Monad m, cr r) =>
@@ -432,7 +412,7 @@ class Multicurryable as e m r curried | curried -> as e m r where
   type BaseMonadAtTheTip as e m r curried :: Type
   multiuncurry :: curried -> NP I as -> DepT e m r
   multicurry :: (NP I as -> DepT e m r) -> curried
-  _runFromEnv ::  m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
+  _runFromEnv :: m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
 
 instance Monad m => Multicurryable '[] e m r (DepT e m r) where
   type BaseMonadAtTheTip '[] e m r (DepT e m r) = m r
@@ -451,14 +431,21 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment, run
 -- the 'DepT' transformer at the tip of a curried function.
 --
--- >>> :{ 
+-- >>> :{
 --  foo :: Int -> Int -> Int -> DepT NilEnv IO ()
 --  foo _ _ _ = pure ()
 -- :}
 --
 --  >>> runFinalDepT (pure NilEnv) foo 1 2 3 :: IO ()
---
-runFinalDepT :: forall as e m r curried . Multicurryable as e m r curried => m (e (DepT e m)) -> curried -> BaseMonadAtTheTip as e m r curried
+runFinalDepT ::
+  forall as e m r curried.
+  Multicurryable as e m r curried =>
+  -- | action that gets hold of the environment
+  m (e (DepT e m)) ->
+  -- | function to invoke with effects in 'DepT'
+  curried ->
+  -- | a new function with effects in the base monad
+  BaseMonadAtTheTip as e m r curried
 runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
@@ -488,9 +475,15 @@ runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 -- :}
 -- Sum {getSum = 7}
 -- Sum {getSum = 0}
---
---
-runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
+runFromEnv ::
+  forall as e m r curried.
+  (Multicurryable as e m r curried, Monad m) =>
+  -- | action that gets hold of the environment
+  m (e (DepT e m)) ->
+  -- | gets a function from the environment with effects in 'DepT'
+  (e (DepT e m) -> curried) ->
+  -- | a new function with effects in the base monad
+  BaseMonadAtTheTip as e m r curried
 runFromEnv = _runFromEnv
 
 -- |
@@ -503,7 +496,6 @@ runFromEnv = _runFromEnv
 --    'restrictEnv', use 'Top' from \"sop-core\".
 --
 -- >>> type UselessAdvice = Advice Top Top2 Top
---
 type Top2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class Top2 e m
 
@@ -530,7 +522,7 @@ instance (f e m, g e m) => (f `And2` g) e m
 
 infixl 7 `And2`
 
--- | A class synonym for @(~)@, the type equality constraint. 
+-- | A class synonym for @(~)@, the type equality constraint.
 --
 -- Poly-kinded, so it can be applied both to type constructors (like monads) and to concrete types.
 --
@@ -539,16 +531,16 @@ infixl 7 `And2`
 -- >>> type FooAdvice = Advice Top (MonadConstraint (MustBe IO)) Top
 --
 -- >>>  type FooAdvice = Advice Top Top2 (MustBe String)
---
-type MustBe :: forall k. k -> k -> Constraint 
+type MustBe :: forall k. k -> k -> Constraint
 class x ~ y => MustBe x y
+
 instance x ~ y => MustBe x y
 
 -- |
 -- Pins both the environment type constructor and the base monad. Sometimes we
 -- don't want to advise functions in some generic environment, but in a
 -- concrete environment having access to all the fields, and in a concrete base
--- monad. 
+-- monad.
 --
 -- Useful to build the @cem@ type application argument of 'advise' and
 -- 'restricEnv'.
@@ -559,7 +551,6 @@ instance x ~ y => MustBe x y
 -- It this library it will be used partially applied:
 --
 -- >>> type FooAdvice = Advice Top (MustBe2 NilEnv IO) Top
---
 type MustBe2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 
@@ -577,7 +568,6 @@ instance (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 --    >>> type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
 --
 --    If what you want is to lift a two-parameter @HasX@-style typeclass to @cem@, use 'Ensure' instead.
---
 type EnvConstraint :: (((Type -> Type) -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c e => EnvConstraint c e m
 
@@ -591,7 +581,6 @@ instance c e => EnvConstraint c e m
 --    >>> type FooAdvice = Advice Top (MonadConstraint MonadIO) Top
 --
 --    >>> type FooAdvice = Advice Top (MonadConstraint (MonadReader Int)) Top
---
 type MonadConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c m => MonadConstraint c e m
 
@@ -620,7 +609,7 @@ instance c m => MonadConstraint c e m
 --
 -- or with a type application to the restriction function:
 --
--- >>> :{ 
+-- >>> :{
 -- returnMempty'' :: Advice ca cem (Monoid `And` Show)
 -- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
 -- :}
@@ -638,9 +627,7 @@ instance c m => MonadConstraint c e m
 --  doLogging':: Advice Show EnsureLoggerAndWriter cr
 --  doLogging'= restrictEnv (Sub Dict) doLogging
 --  doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
--- :} 
---
---
+-- :}
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -651,7 +638,7 @@ restrictArgs ::
   Advice less cem cr ->
   -- | Advice with more restrictive constraint on the args.
   Advice more cem cr
--- about the order of the type parameters... which is more useful? 
+-- about the order of the type parameters... which is more useful?
 -- A possible principle to follow:
 -- We are likely to know the "less" constraint, because advices are likely to
 -- come pre-packaged and having a type signature.
@@ -787,14 +774,12 @@ translateEvidence evidence SOP.Dict =
 -- Some useful definitions re-exported the from \"constraints\" package.
 --
 -- 'Dict' and '(:-)' are GADTs used to capture and transform constraints. Used in the 'restrictArgs', 'restrictEnv' and 'restrictResult' functions.
---
-
 
 -- $constrainthelpers
--- Some  <https://www.reddit.com/r/haskell/comments/ab8ypl/monthly_hask_anything_january_2019/edk1ot3/ class synonyms> 
+-- Some  <https://www.reddit.com/r/haskell/comments/ab8ypl/monthly_hask_anything_january_2019/edk1ot3/ class synonyms>
 -- to help create the constraints that parameterize the 'Advice' type.
 --
--- This library also re-exports the 'Top', 'And' and 'All' helpers from \"sop-core\": 
+-- This library also re-exports the 'Top', 'And' and 'All' helpers from \"sop-core\":
 --
 -- * 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific in @ca@ or @cr@ (@cem@ requires 'Top2').
 --
@@ -803,11 +788,8 @@ translateEvidence evidence SOP.Dict =
 -- * 'All' says that some constraint is satisfied by all the components of an 'NP'
 -- product. In this library, it's used to stipulate constraints on the
 -- arguments of advised functions.
---
 
 -- $invocation
 -- There functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
 --
 -- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
---
---
