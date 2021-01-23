@@ -382,7 +382,18 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 --
 -- __/IMPORTANT!/__ If the @ca@, @cem@ or @cr@ constraints of the supplied
 -- 'Advice' remain polymorphic, they must be given types by means of type
--- applications.
+-- applications:
+--
+-- >>> :{ 
+--  foo :: Int -> DepT NilEnv IO ()
+--  foo _ = pure ()
+--  advisedFoo1 = advise (returnMempty @Top @Top2) foo
+--  advisedFoo2 = advise @Top @Top2 returnMempty foo
+--  advisedFoo3 = advise (printArgs @Top stdout "args: ") foo
+--  advisedFoo4 = advise @_ @_ @Top (printArgs stdout "args: ") foo
+-- :}
+--
+--
 advise ::
   forall ca cem cr as e m r advisee.
   (Multicurryable as e m r advisee, All ca as, cem e m, Monad m, cr r) =>
@@ -426,7 +437,8 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'Top' from \"sop-core\".
 --
---    > type UselessAdvice = Advice Top Top2 Top
+-- >>> type UselessAdvice = Advice Top Top2 Top
+--
 type Top2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class Top2 e m
 
