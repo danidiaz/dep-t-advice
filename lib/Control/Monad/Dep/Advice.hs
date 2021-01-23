@@ -111,6 +111,7 @@ module Control.Monad.Dep.Advice
     -- * Invocation helpers
     -- $invocation
     runFinalDepT,
+    runFromEnv,
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -423,21 +424,21 @@ class Multicurryable as e m r curried | curried -> as e m r where
   type EndingInTheBaseMonad as e m r curried :: Type
   multiuncurry :: curried -> NP I as -> DepT e m r
   multicurry :: (NP I as -> DepT e m r) -> curried
-  _runFinalDepT :: curried -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+  _runFromEnv :: (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
 
 instance Monad m => Multicurryable '[] e m r (DepT e m r) where
   type EndingInTheBaseMonad '[] e m r (DepT e m r) = m r
   multiuncurry action Nil = action
   multicurry f = f Nil
-  _runFinalDepT action eaction = do
+  _runFromEnv extractor eaction = do
     e <- eaction
-    runDepT action e
+    runDepT (extractor e) e
 
 instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
   type EndingInTheBaseMonad (a ': as) e m r (a -> curried) = a -> EndingInTheBaseMonad as e m r curried
   multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
-  _runFinalDepT f eaction a = _runFinalDepT @as @e @m @r @curried (f a) eaction
+  _runFromEnv extractor eaction a = _runFromEnv @as @e @m @r @curried (\f -> extractor f a) eaction
 
 -- | Run the 'DepT' transformer at the end of a curried function, using an
 -- environment obtained from an action in the base monad.
@@ -450,12 +451,10 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 --  >>> runFinalDepT foo (pure NilEnv) 1 2 3 :: IO ()
 --
 runFinalDepT :: forall as e m r curried . Multicurryable as e m r curried => curried -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
-runFinalDepT = _runFinalDepT
+runFinalDepT extractor = _runFromEnv (const extractor)
 
--- runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
--- runFromEnv extractor eaction = 
---     do e e (DepT e m) <- eaction
---        (runFinalDepT @as @e @m @r @curried (extractor e) (pure e)) :: EndingInTheBaseMonad as e m r curried
+runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+runFromEnv = _runFromEnv
 
 -- |
 --    A two-place constraint which requires nothing of the environment and the
