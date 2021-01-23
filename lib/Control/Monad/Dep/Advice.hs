@@ -133,7 +133,7 @@ import Data.SOP.NP
 
 -- $setup
 --
--- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies
+-- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies -XRankNTypes
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
@@ -167,6 +167,8 @@ import Data.SOP.NP
 -- given some concrete value ('Top' in the case of @ca@ and @cr@, 'Top2' in
 -- the case of @cem@) through type application at the moment of calling
 -- 'advise'.
+--
+-- See "Control.Monad.Dep.Advice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
   (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
@@ -271,9 +273,15 @@ instance Monoid (Advice ca cem cr) where
 --    'makeAdvice'. This second argument also receives the summary value of
 --    type @u@ calculated earlier.
 --
---    __/IMPORTANT!/__ When invoking this function, you must always give the type
---    of the existential @u@ through a type application. Otherwise you'll get
---    weird \"u is untouchable\" errors.
+-- >>> :{ 
+--  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
+-- :}
+--
+--    __/IMPORTANT!/__ When invoking 'makeAdvice', you must always give the
+--    type of the existential @u@ through a type application. Otherwise you'll
+--    get weird \"u is untouchable\" errors.
+--
 makeAdvice ::
   forall u ca cem cr.
   -- | The function that tweaks the arguments.
@@ -296,6 +304,12 @@ makeAdvice = Advice (Proxy @u)
 --    Create an advice which only tweaks and/or analyzes the function arguments.
 --
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
+--
+-- >>> :{ 
+--  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing = makeArgsAdvice pure 
+-- :}
+--
 makeArgsAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the arguments.
@@ -317,6 +331,12 @@ makeArgsAdvice tweakArgs =
 --    Create an advice which only tweaks the execution of the final monadic action.
 --
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
+--
+-- >>> :{ 
+--  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing = makeExecutionAdvice id
+-- :}
+--
 makeExecutionAdvice ::
   forall ca cem cr.
   -- | The function that tweaks the execution.
