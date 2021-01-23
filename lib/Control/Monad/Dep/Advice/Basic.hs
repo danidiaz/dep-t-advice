@@ -26,8 +26,6 @@ where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
-import Control.Monad.IO.Class
-import Control.Monad.Trans
 import Data.Proxy
 import Data.SOP
 import Data.SOP (hctraverse_)
