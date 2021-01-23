@@ -693,9 +693,9 @@ translateEvidence evidence SOP.Dict =
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
 --
--- 'NP' is an n-ary product used to represent the argument lists of functions.
+-- 'NP' is an n-ary product used to represent the arguments of advised functions.
 --
--- 'I' is an identity functor.
+-- 'I' is an identity functor. The arguments processed by an 'Advice' come wrapped in it.
 --
 -- 'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example:
 --
@@ -718,7 +718,7 @@ translateEvidence evidence SOP.Dict =
 --
 -- * 'And' combines constraints for @ca@ or @cr@ (@cem@ requires 'And2').
 --
--- * 'All' says that some constraint is satisfied by all the types of an 'NP'
+-- * 'All' says that some constraint is satisfied by all the components of an 'NP'
 -- product. In this library, it's used to stipulate constraints on the
 -- arguments of advised functions.
 --
