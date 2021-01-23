@@ -108,6 +108,9 @@ module Control.Monad.Dep.Advice
     restrictEnv,
     restrictResult,
 
+    -- * Invocation helpers
+    -- $invocation
+    runFinalDepT,
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -417,16 +420,42 @@ type Multicurryable ::
   Type ->
   Constraint
 class Multicurryable as e m r curried | curried -> as e m r where
+  type EndingInTheBaseMonad as e m r curried :: Type
   multiuncurry :: curried -> NP I as -> DepT e m r
   multicurry :: (NP I as -> DepT e m r) -> curried
+  _runFinalDepT :: curried -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
 
-instance Multicurryable '[] e m r (DepT e m r) where
+instance Monad m => Multicurryable '[] e m r (DepT e m r) where
+  type EndingInTheBaseMonad '[] e m r (DepT e m r) = m r
   multiuncurry action Nil = action
   multicurry f = f Nil
+  _runFinalDepT action eaction = do
+    e <- eaction
+    runDepT action e
 
 instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
+  type EndingInTheBaseMonad (a ': as) e m r (a -> curried) = a -> EndingInTheBaseMonad as e m r curried
   multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
+  _runFinalDepT f eaction a = _runFinalDepT @as @e @m @r @curried (f a) eaction
+
+-- | Run the 'DepT' transformer at the end of a curried function, using an
+-- environment obtained from an action in the base monad.
+--
+-- >>> :{ 
+--  foo :: Int -> Int -> Int -> DepT NilEnv IO ()
+--  foo _ _ _ = pure ()
+-- :}
+--
+--  >>> runFinalDepT foo (pure NilEnv) 1 2 3 :: IO ()
+--
+runFinalDepT :: forall as e m r curried . Multicurryable as e m r curried => curried -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+runFinalDepT = _runFinalDepT
+
+-- runFromEnv :: forall as e m r curried . (Multicurryable as e m r curried, Monad m) => (e (DepT e m) -> curried) -> m (e (DepT e m)) -> EndingInTheBaseMonad as e m r curried
+-- runFromEnv extractor eaction = 
+--     do e e (DepT e m) <- eaction
+--        (runFinalDepT @as @e @m @r @curried (extractor e) (pure e)) :: EndingInTheBaseMonad as e m r curried
 
 -- |
 --    A two-place constraint which requires nothing of the environment and the
@@ -738,4 +767,11 @@ translateEvidence evidence SOP.Dict =
 -- * 'All' says that some constraint is satisfied by all the components of an 'NP'
 -- product. In this library, it's used to stipulate constraints on the
 -- arguments of advised functions.
+--
+
+-- $invocation
+-- There functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
+--
+-- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
+--
 --
