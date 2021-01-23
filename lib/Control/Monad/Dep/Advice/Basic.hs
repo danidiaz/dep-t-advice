@@ -79,7 +79,7 @@ instance Eq AnyEq where
       Just Refl -> any1 == any2
 
 -- | 
--- Given functions for looking up and storing values in the underlying monad
+-- Given the means for looking up and storing values in the underlying monad
 -- @m@, makes functions (inefficiently) cache their results.
 --
 -- Notice the equality constraints on the 'Advice'. This means that the monad

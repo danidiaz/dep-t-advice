@@ -466,10 +466,10 @@ class x ~ y => MustBe x y
 instance x ~ y => MustBe x y
 
 -- |
--- Pins both the environment type constructor and the base monad. Sometimes
--- we don't want to advise functions in some generic environment, but in a
--- concrete environment with a concrete base monad, having access to all the
--- fields.
+-- Pins both the environment type constructor and the base monad. Sometimes we
+-- don't want to advise functions in some generic environment, but in a
+-- concrete environment having access to all the fields, and in a concrete base
+-- monad. 
 --
 -- Useful to build the @cem@ type application argument of 'advise' and
 -- 'restricEnv'.
