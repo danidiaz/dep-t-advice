@@ -6,9 +6,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE TypeOperators #-}
+
 
 -- |
 -- This module contains examples of simple advices.
@@ -20,7 +19,7 @@ module Control.Monad.Dep.Advice.Basic
     returnMempty,
     printArgs,
     AnyEq (..),
-    doBadCaching
+    doCachingBadly
   )
 where
 
@@ -68,7 +67,7 @@ printArgs h prefix =
         pure args
     )
 
--- | A helper datatype for universal equality comparisons of existentialized values, used by 'doBadCaching'.
+-- | A helper datatype for universal equality comparisons of existentialized values, used by 'doCachingBadly'.
 --
 -- For a more complete elaboration of this idea, see the the \"exinst\" package.
 data AnyEq where
@@ -90,10 +89,13 @@ instance Eq AnyEq where
 --
 -- The implementation of this function makes use of the existential type
 -- parameter @u@ of 'makeAdvice', because the phase that processes the function
--- arguments needs to communicate the calculated cache key to the phase that
--- processes the function result.
-doBadCaching :: forall m r. (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (And Eq Typeable) (BaseConstraint ((~) m)) ((~) r)
-doBadCaching cacheLookup cachePut =
+-- arguments needs to communicate the calculated `AnyEq` cache key to the phase
+-- that processes the function result.
+--
+-- A better implementation of this advice would likely use an @AnyHashable@
+-- helper datatype for the keys.
+doCachingBadly :: forall m r. (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) (BaseConstraint ((~) m)) ((~) r)
+doCachingBadly cacheLookup cachePut =
   makeAdvice @AnyEq
     ( \args ->
         let key = AnyEq $ cfoldMap_NP (Proxy @(And Eq Typeable)) (\(I a) -> [AnyEq a]) $ args
@@ -110,8 +112,14 @@ doBadCaching cacheLookup cachePut =
             pure r
     )
 
-doBadAsync :: Advice ca (BaseConstraint ((~) IO)) ((~) ())
-doBadAsync = makeExecutionAdvice (\action -> do
+-- | Makes functions that return `()` launch asynchronously.
+--
+-- A better implementation of this advice would likely use the \"async\"
+-- package instead of bare `forkIO`. 
+--
+-- And the @((~) IO)@ constraint could be relaxed to @MonadUnliftIO@.
+doAsyncBadly :: Advice ca (BaseConstraint ((~) IO)) ((~) ())
+doAsyncBadly = makeExecutionAdvice (\action -> do
         e <- ask 
         _ <- liftIO $ forkIO $ runDepT action e
         pure ()

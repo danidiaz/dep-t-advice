@@ -100,7 +100,7 @@ module Control.Monad.Dep.Advice
     restrictResult,
 
     -- * Constraint helpers
-    CapableX,
+    Ensure,
     EnvTop,
     EnvAnd,
     EnvEq,
@@ -373,9 +373,9 @@ data Pair a b = Pair !a !b
 --
 -- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
 -- contains a logging function that itself works in 'DepT' over 'IO'.
-type CapableX :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c (e (DepT e m)) (DepT e m) => CapableX c e m 
-instance c (e (DepT e m)) (DepT e m) => CapableX c e m
+type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class c (e (DepT e m)) (DepT e m) => Ensure c e m 
+instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
