@@ -227,11 +227,11 @@ weirdAdvicedEnv =
    env {
          _controller = advise (doLogging <> emptyResult) (_controller env), --,
          -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
-         _logger = advise @(Show `And` Eq) @EnvTop @Monoid (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
+         _logger = advise @(Show `And` Eq) @Top2 @Monoid (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
        }
 
 type HasLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-type HasLoggerAndWriter = Ensure HasLogger `EnvAnd` BaseConstraint (MonadWriter TestTrace)
+type HasLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint (MonadWriter TestTrace)
 
 -- to ways to invoke restrict functions
 doLogging':: Advice Show HasLoggerAndWriter cr

@@ -51,12 +51,12 @@ returnMempty =
 -- | Given a 'Handle' and a prefix string, makes functions print their
 -- arguments to the 'Handle'.
 --
--- This advice uses 'BaseConstraint' to lift the 'MonadIO' constraint that
+-- This advice uses 'MonadConstraint' to lift the 'MonadIO' constraint that
 -- applies only to the monad.
 --
 -- Because it doesn't touch the return value of the advised function, this
 -- 'Advice' is polymorphic on @cr@.
-printArgs :: forall cr. Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
+printArgs :: forall cr. Handle -> String -> Advice Show (MonadConstraint MonadIO) cr
 printArgs h prefix =
   makeArgsAdvice
     ( \args -> do
@@ -94,7 +94,7 @@ instance Eq AnyEq where
 --
 -- A better implementation of this advice would likely use an @AnyHashable@
 -- helper datatype for the keys.
-doCachingBadly :: forall m r. (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) (BaseConstraint ((~) m)) ((~) r)
+doCachingBadly :: forall m r. (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) (MonadConstraint (MustBe m)) (MustBe r)
 doCachingBadly cacheLookup cachePut =
   makeAdvice @AnyEq
     ( \args ->
@@ -118,7 +118,7 @@ doCachingBadly cacheLookup cachePut =
 -- package instead of bare `forkIO`. 
 --
 -- And the @((~) IO)@ constraint could be relaxed to @MonadUnliftIO@.
-doAsyncBadly :: Advice ca (BaseConstraint ((~) IO)) ((~) ())
+doAsyncBadly :: Advice ca (MonadConstraint (MustBe IO)) (MustBe ())
 doAsyncBadly = makeExecutionAdvice (\action -> do
         e <- ask 
         _ <- liftIO $ forkIO $ runDepT action e

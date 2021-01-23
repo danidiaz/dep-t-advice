@@ -16,71 +16,70 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE PolyKinds #-}
 
-{-|
-    This package provices the 'Advice' datatype, along for functions for creating,
-    manipulating, composing and applying values of that type.
-
-    'Advice's represent generic transformations on 'DepT'-effectful functions of
-    any number of arguments.
-
->>> :{
-    foo0 :: DepT NilEnv IO (Sum Int)  
-    foo0 = pure (Sum 5)
-    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
-    foo1 _ = foo0
-    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
-    foo2 _ = foo1
-:}
-
-They work for @DepT@-actions of zero arguments:
-
->>> :{
-    let action = advise (printArgs @Top stdout "foo0") foo0
-     in runDepT action NilEnv
-:}
-foo0:
-<BLANKLINE>
-Sum {getSum = 5}
-
-And for functions of one or more arguments, provided they end on a @DepT@-action:
-
->>> :{ 
-    let action = advise (printArgs @Top stdout "foo1") foo1 False
-     in runDepT action NilEnv
-:}
-foo1: False
-<BLANKLINE>
-Sum {getSum = 5}
-
->>> :{
-    let action = advise (printArgs @Top stdout "foo2") foo2 'd' False
-     in runDepT action NilEnv
-:}
-foo2: 'd' False 
-<BLANKLINE>
-Sum {getSum = 5}
-
-'Advice's can also tweak the result value of functions:
-
->>> :{
-    let action = advise (returnMempty @Top @EnvTop) foo2 'd' False
-     in runDepT action NilEnv
-:}
-Sum {getSum = 0}
-
-And they can be combined using @Advice@'s 'Monoid' instance before being applied
-(although that might require harmonizing their constraint parameters):
-
->>> :{
-    let action = advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
-     in runDepT action NilEnv
-:}
-foo2: 'd' False 
-<BLANKLINE>
-Sum {getSum = 0}
-
--}
+-- |
+--    This package provices the 'Advice' datatype, along for functions for creating,
+--    manipulating, composing and applying values of that type.
+--
+--    'Advice's represent generic transformations on 'DepT'-effectful functions of
+--    any number of arguments.
+--
+-- >>> :{
+--    foo0 :: DepT NilEnv IO (Sum Int)
+--    foo0 = pure (Sum 5)
+--    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
+--    foo1 _ = foo0
+--    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
+--    foo2 _ = foo1
+-- :}
+--
+-- They work for @DepT@-actions of zero arguments:
+--
+-- >>> :{
+--    let action = advise (printArgs @Top stdout "foo0") foo0
+--     in runDepT action NilEnv
+-- :}
+-- foo0:
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- And for functions of one or more arguments, provided they end on a @DepT@-action:
+--
+-- >>> :{
+--    let action = advise (printArgs @Top stdout "foo1") foo1 False
+--     in runDepT action NilEnv
+-- :}
+-- foo1: False
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- >>> :{
+--    let action = advise (printArgs @Top stdout "foo2") foo2 'd' False
+--     in runDepT action NilEnv
+-- :}
+-- foo2: 'd' False
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- 'Advice's can also tweak the result value of functions:
+--
+-- >>> :{
+--    let action = advise (returnMempty @Top @Top2) foo2 'd' False
+--     in runDepT action NilEnv
+-- :}
+-- Sum {getSum = 0}
+--
+-- And they can be combined using @Advice@'s 'Monoid' instance before being applied
+-- (although that might require harmonizing their constraint parameters):
+--
+-- >>> :{
+--    let action = advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
+--     in runDepT action NilEnv
+-- :}
+-- foo2: 'd' False
+-- <BLANKLINE>
+-- Sum {getSum = 0}
 module Control.Monad.Dep.Advice
   ( -- * The Advice type
     Advice,
@@ -93,23 +92,27 @@ module Control.Monad.Dep.Advice
     -- * Applying Advices
     advise,
 
+    -- * Constraint helpers
+    -- $constrainthelpers
+    Ensure,
+    Top2,
+    And2,
+    MonadConstraint,
+    EnvConstraint,
+    MustBe,
+    MustBe2,
+
     -- * Combining Advices by harmonizing their constraints
     -- $restrict
     restrictArgs,
     restrictEnv,
     restrictResult,
 
-    -- * Constraint helpers
-    Ensure,
-    EnvTop,
-    EnvAnd,
-    EnvEq,
-    BaseConstraint,
     -- * "sop-core" re-exports
     -- $sop
     Top,
-    All,
     And,
+    All,
     NP (..),
     I (..),
     cfoldMap_NP,
@@ -128,23 +131,20 @@ import Data.SOP
 import Data.SOP.Dict qualified as SOP
 import Data.SOP.NP
 
-{- $setup
- 
->>> :set -XTypeApplications -XStandaloneKindSignatures
->>> import Control.Monad
->>> import Control.Monad.IO.Class
->>> import Control.Monad.Dep
->>> import Control.Monad.Dep.Advice
->>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty) 
->>> import Data.Constraint
->>> import Data.Kind
->>> import Data.SOP
->>> import Data.SOP.NP
->>> import Data.Monoid
->>> import System.IO
-
--}
-
+-- $setup
+--
+-- >>> :set -XTypeApplications -XStandaloneKindSignatures
+-- >>> import Control.Monad
+-- >>> import Control.Monad.IO.Class
+-- >>> import Control.Monad.Dep
+-- >>> import Control.Monad.Dep.Advice
+-- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Data.Constraint
+-- >>> import Data.Kind
+-- >>> import Data.SOP
+-- >>> import Data.SOP.NP
+-- >>> import Data.Monoid
+-- >>> import System.IO
 
 -- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the function satisfies certain constraints on the
@@ -157,12 +157,12 @@ import Data.SOP.NP
 -- * @cr@ of kind @Type -> Constraint@, the constraint required of the return type.
 --
 -- We can define 'Advice's that work with concrete types by using partially
--- applied equality constraints in the case of @ca@ and @cr@, and 'EnvEq' in
+-- applied equality constraints in the case of @ca@ and @cr@, and 'MustBe2' in
 -- the case of @cem@.
 --
 -- 'Advice's that don't care about a particular constraint can leave it
 -- polymorphic, and this facilitates composition, but the constraint must be
--- given some concrete value ('Top' in the case of @ca@ and @cr@, 'EnvTop' in
+-- given some concrete value ('Top' in the case of @ca@ and @cr@, 'Top2' in
 -- the case of @cem@) through type application at the moment of calling
 -- 'advise'.
 type Advice ::
@@ -374,7 +374,8 @@ data Pair a b = Pair !a !b
 -- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
 -- contains a logging function that itself works in 'DepT' over 'IO'.
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c (e (DepT e m)) (DepT e m) => Ensure c e m 
+class c (e (DepT e m)) (DepT e m) => Ensure c e m
+
 instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
@@ -418,63 +419,102 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
 
 -- |
---    A constraint which requires nothing of the environment and the associated monad.
+--    A two-place constraint which requires nothing of the environment and the
+--    associated monad.
 --
 --    Useful as the @cem@ type application argument of 'advise' and 'restrictEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'Top' from \"sop-core\".
-type EnvTop :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class EnvTop e m
+type Top2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class Top2 e m
 
-instance EnvTop e m
+instance Top2 e m
 
 -- |
---    Creates composite constraints on the environment and monad.
+--    Combines two two-place constraints on the environment / monad pair.
 --
---    For example, an advice which requires both a @HasLogger@ and a
---    @HasRepository@ might use this.
+--    For example, an advice which requires both @Ensure HasLogger@ and @Ensure
+--    HasRepository@ might use this.
 --
 --    Useful to build the @cem@ type application argument of 'advise' and
 --    'restrictEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'And' from \"sop-core\".
-type EnvAnd :: (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) 
-            -> (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) 
-            -> (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint)
-class (f e m, g e m) => (f `EnvAnd` g) e m
+type And2 ::
+  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
+  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
+  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint)
+class (f e m, g e m) => (f `And2` g) e m
 
-instance (f e m, g e m) => (f `EnvAnd` g) e m
+instance (f e m, g e m) => (f `And2` g) e m
 
-infixl 7 `EnvAnd`
+infixl 7 `And2`
+
+-- | A class synonym for @(~)@. 
+--
+-- Poly-kinded, so it can be applied both to type constructors (like monads) and to concrete types.
+--
+-- It this library it will be used partially applied:
+--
+-- > MustBe IO
+--
+-- > MustBe Int
+type MustBe :: forall k. k -> k -> Constraint 
+class x ~ y => MustBe x y
+instance x ~ y => MustBe x y
 
 -- |
---    When whe don't want to advise functions in some generic 'DepT'
---    environment, but in a concrete environment with a concrete base monad,
---    having access to all the fields.
+-- Pins both the environment type constructor and the base monad. Sometimes
+-- we don't want to advise functions in some generic environment, but in a
+-- concrete environment with a concrete base monad, having access to all the
+-- fields.
 --
---    Useful to build the @cem@ type application argument of 'advise' and
---    'restricEnv'.
+-- Useful to build the @cem@ type application argument of 'advise' and
+-- 'restricEnv'.
 --
---    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
---    'restrictEnv', use a partially applied type equality, like @((~) Int)@.
-type EnvEq :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class (e' ~ e, m' ~ m) => EnvEq e' m' e m
+-- For similar behavior with the @ar@ and @cr@ type arguments of 'advise'
+-- and 'restrictEnv', use 'MustBe'.
+--
+-- It this library it will be used partially applied:
+--
+-- > MustBe2 NilEnv IO
+type MustBe2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 
-instance (e' ~ e, m' ~ m) => EnvEq e' m' e m
+instance (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 
 -- |
---    Allows us to require a constraint only on the base monad, for example a base moonad with @MonadIO@.
+--    Require a constraint only on the /unapplied/ environment type constructor, which has kind @(Type -> Type) -> Type@.
 --
---    Useful to build @cem@ type application argument of 'advise' and 'restricEnv'.
-type BaseConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c m => BaseConstraint c e m
-instance c m => BaseConstraint c e m
+--    Can be used to build @cem@ type application argument of 'advise' and 'restrictEnv'.
+--
+--    Most of the time this is /not/ what you want. One exception is when
+--    pinning the environment with a 'MustBe' equality constraint, while
+--    leaving the base monad free:
+--
+--    > EnvConstraint (MustBe NilEnv)
+--
+--    If what you want is to lift a two-parameter @HasX@-style typeclass to @cem@, use 'Ensure' instead.
+--
+type EnvConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class c m => EnvConstraint c e m
 
--- type BaseConstraintEq :: (Type -> Type) -> Type -> (Type -> Type) -> Constraint
--- class c ((~) m) => BaseConstraintEq c e m
--- instance c ((~) m) => BaseConstraintEq c e m
+instance c m => EnvConstraint c e m
+
+-- |
+--    Require a constraint only on the base monad, for example a base moonad with @MonadIO@.
+--
+--    Useful to build @cem@ type application argument of 'advise' and 'restrictEnv'.
+--
+--    > MonadConstraint MonadIO
+--
+--    > MonadConstraint (MonadReader Int)
+type MonadConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class c m => MonadConstraint c e m
+
+instance c m => MonadConstraint c e m
 
 -- $restrict
 --
@@ -511,7 +551,7 @@ instance c m => BaseConstraint c e m
 -- doLogging :: Advice Show HasLogger cr
 --
 -- type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
--- type HasLoggerAndWriter = HasLogger \`EnvAnd\` BaseConstraint (MonadWriter TestTrace)
+-- type HasLoggerAndWriter = HasLogger \`And2\` MonadConstraint (MonadWriter TestTrace)
 --
 -- doLogging':: Advice Show HasLoggerAndWriter cr
 -- doLogging'= restrictEnv (Sub Dict) doLogging
@@ -655,22 +695,30 @@ translateEvidence evidence SOP.Dict =
 --
 -- 'NP' is an n-ary product used to represent the argument lists of functions.
 --
--- 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific.
---
--- 'And' combines constraints.
---
--- 'All' says that some constraint is satisfied by all the types of an 'NP' product.
---
 -- 'I' is an identity functor.
 --
 -- 'cfoldMap_NP' is useful to construct homogeneous lists out of the 'NP' product, for example:
 --
 -- >>> cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) (I False :* I (1::Int) :* Nil)
 -- ["False","1"]
---
 
 -- $constraints
 --
 -- Some useful definitions re-exported the from \"constraints\" package.
 --
 -- 'Dict' and '(:-)' are GADTs used to capture and transform constraints.
+
+
+-- $constrainthelpers
+-- Some class synonyms to help create the constraints that parameterize the 'Advice' type.
+--
+-- This library also re-exports the 'Top', 'And' and 'All' helpers from \"sop-core\": 
+--
+-- * 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific in @ca@ or @cr@ (@cem@ requires 'Top2').
+--
+-- * 'And' combines constraints for @ca@ or @cr@ (@cem@ requires 'And2').
+--
+-- * 'All' says that some constraint is satisfied by all the types of an 'NP'
+-- product. In this library, it's used to stipulate constraints on the
+-- arguments of advised functions.
+--
