@@ -230,19 +230,23 @@ weirdAdvicedEnv =
          _logger = advise @(Show `And` Eq) @Top2 @Monoid (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
        }
 
-type HasLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-type HasLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint (MonadWriter TestTrace)
+type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+type EnsureLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint (MonadWriter TestTrace)
 
 -- to ways to invoke restrict functions
-doLogging':: Advice Show HasLoggerAndWriter cr
+doLogging':: Advice Show EnsureLoggerAndWriter cr
 doLogging'= restrictEnv (Sub Dict) doLogging
 
-doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
+doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
 
 returnMempty' :: Advice ca cem (Monoid `And` Show)
 returnMempty' = restrictResult (Sub Dict) returnMempty
 
 returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
+
+-- does EnvConstraint compile?
+
+type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
 
 --
 --

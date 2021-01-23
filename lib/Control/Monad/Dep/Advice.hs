@@ -148,17 +148,20 @@ import Data.SOP.NP
 
 -- | A generic transformation of a 'DepT'-effectful function of any number of
 -- arguments, provided the function satisfies certain constraints on the
--- arguments, the environment datatype and base monad, and the return type.
+-- arguments, the environment type constructor and base monad, and the return type.
 --
 -- It is parameterized by three constraints:
 --
 -- * @ca@ of kind @Type -> Constraint@, the constraint required of each argument (usually something like @Show@).
--- * @cem@ of kind @Type -> (Type -> Type) -> Constraint@, the constraint required of the 'DepT'-environment / base monad combination (usually something like @HasLogger@).
+-- * @cem@ of kind @((Type -> Type) -> Type) -> (Type -> Type) -> Constraint@,
+-- a two-place constraint required of the environment type constructor / base
+-- monad combination. Note that the environment type constructor remains
+-- unapplied. That is, for a given @cem@, @cem NilEnv IO@ kind-checks but @cem
+-- (NilEnv IO) IO@ doesn't. See also 'Ensure'.
 -- * @cr@ of kind @Type -> Constraint@, the constraint required of the return type.
 --
--- We can define 'Advice's that work with concrete types by using partially
--- applied equality constraints in the case of @ca@ and @cr@, and 'MustBe2' in
--- the case of @cem@.
+-- We can define 'Advice's that work with concrete types by using 'MustBe' in
+-- the case of @ca@ and @cr@, and 'MustBe2' in the case of @cem@.
 --
 -- 'Advice's that don't care about a particular constraint can leave it
 -- polymorphic, and this facilitates composition, but the constraint must be
@@ -328,51 +331,28 @@ makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) 
 
 data Pair a b = Pair !a !b
 
---
---
---
-
--- | This helper type synonym has three parameters:
---
--- * A two-place typeclass relating a fully constructed environment type to the
--- monad on which the functions in the enviroment have their effects.
--- * The type constructor of an environment parameterizable by a monad.
--- * The monad to be used as the base monad for 'DepT'.
---
--- The result is a 'Constraint' that says that the environment parameterized by
--- 'DepT' over the base monad satisfies the first constraint, with 'DepT' over
--- the base monad as the effect type of the functions.
---
--- For example, if we have the constraint
+-- | 
+-- 'Ensure' is a helper for lifting typeclass definitions of the form:
 --
 -- @
---
 --  type HasLogger :: Type -> (Type -> Type) -> Constraint
---  class HasLogger r m | r -> m where
---    logger :: r -> String -> m ()
+--  class HasLogger em m | em -> m where
+--    logger :: em -> String -> m ()
 -- @
 --
--- and the parameterizable enviroment
+-- To work as the @cem@ constraint, like this:
 --
--- @
--- type Env :: (Type -> Type) -> Type
--- data Env m = Env
---   { _logger :: String -> m (),
---     _repository :: Int -> m (),
---     _controller :: Int -> m String
---   }
--- instance HasLogger (Env m) m where
---   logger = _logger
--- @
+-- > type FooAdvice = Advice Top (Ensure HasLogger) Top
 --
--- then the constraint
+-- Why is it necessary? Two-place @HasX@-style constraints receive the \"fully
+-- applied\" type of the record-of-functions. That is: @NilEnv IO@ instead of
+-- simply @NilEnv@. This allows them to also work with monomorphic
+-- environments (like those in <http://hackage.haskell.org/package/rio RIO>) whose type isn't parameterized by any monad.
 --
--- @
--- Capable HasLogger Env IO
--- @
+-- But the @cem@ constraint works with the type constructor of the environment
+-- record, of kind @(Type -> Type) -> Type@, and not with the fully applied
+-- type of kind @Type@.
 --
--- Means that the 'Env' parameterized by the 'DepT' transformer over 'IO'
--- contains a logging function that itself works in 'DepT' over 'IO'.
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c (e (DepT e m)) (DepT e m) => Ensure c e m
 
@@ -420,12 +400,14 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 
 -- |
 --    A two-place constraint which requires nothing of the environment and the
---    associated monad.
+--    base monad.
 --
 --    Useful as the @cem@ type application argument of 'advise' and 'restrictEnv'.
 --
 --    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
 --    'restrictEnv', use 'Top' from \"sop-core\".
+--
+--    > type UselessAdvice = Advice Top Top2 Top
 type Top2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class Top2 e m
 
@@ -452,7 +434,7 @@ instance (f e m, g e m) => (f `And2` g) e m
 
 infixl 7 `And2`
 
--- | A class synonym for @(~)@. 
+-- | A class synonym for @(~)@, the type equality constraint. 
 --
 -- Poly-kinded, so it can be applied both to type constructors (like monads) and to concrete types.
 --
@@ -494,23 +476,24 @@ instance (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 --    pinning the environment with a 'MustBe' equality constraint, while
 --    leaving the base monad free:
 --
---    > EnvConstraint (MustBe NilEnv)
+--    >>> type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
 --
 --    If what you want is to lift a two-parameter @HasX@-style typeclass to @cem@, use 'Ensure' instead.
 --
-type EnvConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c m => EnvConstraint c e m
+type EnvConstraint :: (((Type -> Type) -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+class c e => EnvConstraint c e m
 
-instance c m => EnvConstraint c e m
+instance c e => EnvConstraint c e m
 
 -- |
 --    Require a constraint only on the base monad, for example a base moonad with @MonadIO@.
 --
 --    Useful to build @cem@ type application argument of 'advise' and 'restrictEnv'.
 --
---    > MonadConstraint MonadIO
+--    >>> type FooAdvice = Advice Top (MonadConstraint MonadIO) Top
 --
---    > MonadConstraint (MonadReader Int)
+--    >>> type FooAdvice = Advice Top (MonadConstraint (MonadReader Int)) Top
+--
 type MonadConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class c m => MonadConstraint c e m
 
@@ -542,35 +525,24 @@ instance c m => MonadConstraint c e m
 -- or with a type application to the restriction function:
 --
 -- @
--- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
+-- returnMempty'' = restrictResult @(Monoid \`And\` Show) (Sub Dict) returnMempty
 -- @
 --
 -- Another example:
 --
 -- @
--- doLogging :: Advice Show HasLogger cr
+-- doLogging :: Advice Show (Ensure HasLogger) cr
 --
--- type HasLoggerAndWriter :: Type -> (Type -> Type) -> Constraint
--- type HasLoggerAndWriter = HasLogger \`And2\` MonadConstraint (MonadWriter TestTrace)
+-- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+-- type EnsureLoggerAndWriter = Ensure HasLogger \`And2\` MonadConstraint (MonadWriter TestTrace)
 --
--- doLogging':: Advice Show HasLoggerAndWriter cr
+-- doLogging':: Advice Show EnsureLoggerAndWriter cr
 -- doLogging'= restrictEnv (Sub Dict) doLogging
 --
--- doLogging'' = restrictEnv @HasLoggerAndWriter (Sub Dict) doLogging
+-- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
 -- @
 
--- |
---    Makes the constraint on the arguments more restrictive.
-
--- think about the order of the type parameters... which is more useful? is it relevant?
--- A possible principle to follow:
-
--- * We are likely to know the "less" constraint, because advices are likely to compe pre-packaged and having a type signature.
-
--- * We arent' so sure about having a signature for a whole composed Advice, because the composition might be done
-
--- on the fly, while constructing a record, without a top-level binding with a type signature.
--- This seems to favor putting "more" first.
+-- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
   forall more less cem cr.
   -- | Evidence that one constraint implies the other.
@@ -579,6 +551,14 @@ restrictArgs ::
   Advice less cem cr ->
   -- | Advice with more restrictive constraint on the args.
   Advice more cem cr
+-- about the order of the type parameters... which is more useful? 
+-- A possible principle to follow:
+-- We are likely to know the "less" constraint, because advices are likely to
+-- come pre-packaged and having a type signature.
+-- We arent' so sure about having a signature for a whole composed Advice,
+-- because the composition might be done
+-- on the fly, while constructing a record, without a top-level binding with a
+-- type signature.  This seems to favor putting "more" first.
 restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more less cem cr u.
@@ -710,7 +690,8 @@ translateEvidence evidence SOP.Dict =
 
 
 -- $constrainthelpers
--- Some class synonyms to help create the constraints that parameterize the 'Advice' type.
+-- Some  <https://www.reddit.com/r/haskell/comments/ab8ypl/monthly_hask_anything_january_2019/edk1ot3/ class synonyms> 
+-- to help create the constraints that parameterize the 'Advice' type.
 --
 -- This library also re-exports the 'Top', 'And' and 'All' helpers from \"sop-core\": 
 --
