@@ -20,8 +20,9 @@ import Control.Monad.Dep.Advice
 import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
+import Control.Monad.RWS
 import Data.Kind
-import Data.List (intercalate)
+import Data.List (intercalate,lookup)
 import Rank2 qualified
 import Rank2.TH qualified
 import Test.Tasty
@@ -74,8 +75,8 @@ mkStdoutRepository entity = do
 type TestTrace = ([String], [Int])
 
 -- A "fake". A pure implementation for tests.
-mkFakeLogger :: MonadWriter TestTrace m => String -> m ()
-mkFakeLogger msg = tell ([msg], [])
+mkFakeLogger :: Monoid x => MonadWriter ([String],x) m => String -> m ()
+mkFakeLogger msg = tell ([msg], mempty)
 
 -- Ditto.
 mkFakeRepository :: (MonadReader e m, HasLogger e m, MonadWriter TestTrace m) => Int -> m ()
@@ -248,6 +249,60 @@ returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
 
 type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
 
+
+--
+--
+-- environment for testing ba
+
+data CachingTestEnv m = CachingTestEnv { 
+    _cacheTestLogic :: m (),
+    _expensiveComputation :: Int -> Bool -> m String,
+    _logger2 :: String -> m ()
+    }
+
+instance HasLogger (CachingTestEnv m) m where
+  logger = _logger2
+
+type HasExpensiveComputation :: Type -> (Type -> Type) -> Constraint
+class HasExpensiveComputation r m | r -> m where
+  expensiveComputation :: r -> Int -> Bool -> m String
+instance HasExpensiveComputation (CachingTestEnv m) m where
+  expensiveComputation = _expensiveComputation 
+
+mkFakeExpensiveComputation :: (MonadReader e m, HasLogger e m) => Int -> Bool -> m String
+mkFakeExpensiveComputation i b = do
+    e <- ask
+    logger e "Doing expensive computation"
+    return $ (show i ++ show b)
+
+cacheTestLogic :: (MonadReader e m, HasLogger e m, HasExpensiveComputation e m) => m ()
+cacheTestLogic = do
+    e <- ask
+    expensiveComputation e 0 False >>= logger e
+    expensiveComputation e 1 True >>= logger e
+    expensiveComputation e 0 False >>= logger e
+    expensiveComputation e 1 True >>= logger e
+
+type ExpensiveComputationMonad = RWS () ([String],()) [(AnyEq,String)]
+
+cacheLookup :: AnyEq -> ExpensiveComputationMonad (Maybe String)
+cacheLookup key = do
+    cache <- get
+    pure $ lookup key cache
+
+cachePut :: AnyEq -> String -> ExpensiveComputationMonad ()
+cachePut key v = modify ((key,v) :)
+
+cacheTestEnv :: CachingTestEnv (DepT CachingTestEnv ExpensiveComputationMonad)
+cacheTestEnv = CachingTestEnv {
+        _cacheTestLogic = cacheTestLogic,
+        _expensiveComputation = advise (doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
+        _logger2 = mkFakeLogger
+    }
+
+expectedCached :: ([String],())
+expectedCached = (["Doing expensive computation","0False","Doing expensive computation","1True","0False","1True"],())
+
 --
 --
 --
@@ -261,7 +316,12 @@ tests =
           execWriter $ runDepT (do e <- ask; (_controller . _inner) e 7) biggerEnv,
       testCase "hopeAOPWorks" $
         assertEqual "" expectedAdviced $
-          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv
+          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv,
+      testCase "hopeCachingWorks" $
+        assertEqual "" expectedCached $
+          let action = runFromEnv (pure cacheTestEnv) _cacheTestLogic 
+              (_,w) = execRWS action () mempty
+           in w
     ]
 
 main :: IO ()
