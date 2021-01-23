@@ -133,7 +133,7 @@ import Data.SOP.NP
 
 -- $setup
 --
--- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies -XRankNTypes
+-- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies -XRankNTypes -XTypeOperators -XConstraintKinds
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
@@ -385,8 +385,8 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 -- applications:
 --
 -- >>> :{ 
---  foo :: Int -> DepT NilEnv IO ()
---  foo _ = pure ()
+--  foo :: Int -> DepT NilEnv IO String
+--  foo _ = pure "foo"
 --  advisedFoo1 = advise (returnMempty @Top @Top2) foo
 --  advisedFoo2 = advise @Top @Top2 returnMempty foo
 --  advisedFoo3 = advise (printArgs @Top stdout "args: ") foo
@@ -471,9 +471,10 @@ infixl 7 `And2`
 --
 -- It this library it will be used partially applied:
 --
--- > MustBe IO
+-- >>> type FooAdvice = Advice Top (MonadConstraint (MustBe IO)) Top
 --
--- > MustBe Int
+-- >>>  type FooAdvice = Advice Top Top2 (MustBe String)
+--
 type MustBe :: forall k. k -> k -> Constraint 
 class x ~ y => MustBe x y
 instance x ~ y => MustBe x y
@@ -492,7 +493,8 @@ instance x ~ y => MustBe x y
 --
 -- It this library it will be used partially applied:
 --
--- > MustBe2 NilEnv IO
+-- >>> type FooAdvice = Advice Top (MustBe2 NilEnv IO) Top
+--
 type MustBe2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 class (e' ~ e, m' ~ m) => MustBe2 e' m' e m
 
@@ -546,32 +548,34 @@ instance c m => MonadConstraint c e m
 --    how to construct such evidence? By using the 'Sub' and the 'Dict'
 --    constructors, with either an explicit type signature:
 --
--- @
--- returnMempty :: Advice ca cem Monoid
---
--- returnMempty' :: Advice ca cem (Monoid \`And\` Show)
+-- >>> :{
+-- returnMempty' :: Advice ca cem (Monoid `And` Show)
 -- returnMempty' = restrictResult (Sub Dict) returnMempty
--- @
+-- :}
 --
 -- or with a type application to the restriction function:
 --
--- @
--- returnMempty'' = restrictResult @(Monoid \`And\` Show) (Sub Dict) returnMempty
--- @
+-- >>> :{ 
+-- returnMempty'' :: Advice ca cem (Monoid `And` Show)
+-- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
+-- :}
 --
 -- Another example:
 --
--- @
--- doLogging :: Advice Show (Ensure HasLogger) cr
+-- >>> :{
+--  type HasLogger :: Type -> (Type -> Type) -> Constraint
+--  class HasLogger em m | em -> m where
+--    logger :: em -> String -> m ()
+--  doLogging :: Advice Show (Ensure HasLogger) cr
+--  doLogging = undefined
+--  type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+--  type EnsureLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint MonadIO
+--  doLogging':: Advice Show EnsureLoggerAndWriter cr
+--  doLogging'= restrictEnv (Sub Dict) doLogging
+--  doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
+-- :} 
 --
--- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
--- type EnsureLoggerAndWriter = Ensure HasLogger \`And2\` MonadConstraint (MonadWriter TestTrace)
 --
--- doLogging':: Advice Show EnsureLoggerAndWriter cr
--- doLogging'= restrictEnv (Sub Dict) doLogging
---
--- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
--- @
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -717,7 +721,8 @@ translateEvidence evidence SOP.Dict =
 --
 -- Some useful definitions re-exported the from \"constraints\" package.
 --
--- 'Dict' and '(:-)' are GADTs used to capture and transform constraints.
+-- 'Dict' and '(:-)' are GADTs used to capture and transform constraints. Used in the 'restrictArgs', 'restrictEnv' and 'restrictResult' functions.
+--
 
 
 -- $constrainthelpers
