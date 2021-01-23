@@ -133,9 +133,8 @@ import Data.SOP.NP
 
 -- $setup
 --
--- >>> :set -XTypeApplications -XStandaloneKindSignatures
+-- >>> :set -XTypeApplications -XStandaloneKindSignatures -XMultiParamTypeClasses -XFunctionalDependencies
 -- >>> import Control.Monad
--- >>> import Control.Monad.IO.Class
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
 -- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
@@ -334,15 +333,15 @@ data Pair a b = Pair !a !b
 -- | 
 -- 'Ensure' is a helper for lifting typeclass definitions of the form:
 --
--- @
+-- >>> :{ 
 --  type HasLogger :: Type -> (Type -> Type) -> Constraint
 --  class HasLogger em m | em -> m where
 --    logger :: em -> String -> m ()
--- @
+-- :} 
 --
 -- To work as the @cem@ constraint, like this:
 --
--- > type FooAdvice = Advice Top (Ensure HasLogger) Top
+-- >>> type FooAdvice = Advice Top (Ensure HasLogger) Top
 --
 -- Why is it necessary? Two-place @HasX@-style constraints receive the \"fully
 -- applied\" type of the record-of-functions. That is: @NilEnv IO@ instead of
