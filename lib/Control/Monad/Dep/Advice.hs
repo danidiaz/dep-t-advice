@@ -19,7 +19,7 @@
 {-# LANGUAGE UndecidableSuperClasses #-}
 
 -- |
---    This package provices the 'Advice' datatype, along for functions for creating,
+--    This package provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
 --    'Advice's represent generic transformations on 'DepT'-effectful functions of
@@ -790,6 +790,6 @@ translateEvidence evidence SOP.Dict =
 -- arguments of advised functions.
 
 -- $invocation
--- There functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
+-- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
 --
 -- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
