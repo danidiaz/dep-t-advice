@@ -335,7 +335,7 @@ makeArgsAdvice tweakArgs =
 makeExecutionAdvice ::
   forall ca cem r.
   -- | The function that tweaks the execution.
-  ( forall e m r.
+  ( forall e m.
     (cem e m, Monad m) =>
     DepT e m r ->
     DepT e m r
@@ -628,6 +628,53 @@ instance c m => MonadConstraint c e m
 --  doLogging'= restrictEnv (Sub Dict) doLogging
 --  doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
 -- :}
+
+
+-- | Makes the constraint on the arguments more restrictive.
+restrictArgs ::
+  forall more less cem r.
+  -- | Evidence that one constraint implies the other.
+  (forall x. more x :- less x) ->
+  -- | Advice with less restrictive constraint on the args.
+  Advice less cem r ->
+  -- | Advice with more restrictive constraint on the args.
+  Advice more cem r
+-- about the order of the type parameters... which is more useful?
+-- A possible principle to follow:
+-- We are likely to know the "less" constraint, because advices are likely to
+-- come pre-packaged and having a type signature.
+-- We arent' so sure about having a signature for a whole composed Advice,
+-- because the composition might be done
+-- on the fly, while constructing a record, without a top-level binding with a
+-- type signature.  This seems to favor putting "more" first.
+restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
+  let captureExistential ::
+        forall more less cem r u.
+        (forall x. more x :- less x) ->
+        Proxy u ->
+        ( forall as e m.
+          (All less as, cem e m, Monad m) =>
+          NP I as ->
+          DepT e m (u, NP I as)
+        ) ->
+        ( forall e m.
+          (cem e m, Monad m) =>
+          u ->
+          DepT e m r ->
+          DepT e m r
+        ) ->
+        Advice more cem r
+      captureExistential evidence' _ tweakArgs' tweakExecution' =
+        Advice
+          (Proxy @u)
+          ( let tweakArgs'' :: forall as e m. (All more as, cem e m, Monad m) => NP I as -> DepT e m (u, NP I as)
+                tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
+                  f -> case f (SOP.Dict @(All more) @as) of
+                    SOP.Dict -> \args -> tweakArgs' @as @e @m args
+             in tweakArgs''
+          )
+          tweakExecution'
+   in captureExistential evidence proxy tweakArgs tweakExecution
 
 
 translateEvidence :: forall more less a. (forall x. more x :- less x) -> SOP.Dict more a -> SOP.Dict less a
