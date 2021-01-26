@@ -195,10 +195,10 @@ data Advice ca e m r where
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
-instance Semigroup (Advice ca e m r) where
+instance Monad m => Semigroup (Advice ca e m r) where
   Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
     let captureExistentials ::
-          forall ca e m r outer inner.
+          forall ca e r outer inner.
           Proxy outer ->
           ( forall as.
             All ca as =>
@@ -247,9 +247,9 @@ instance Semigroup (Advice ca e m r) where
                     )
                in tweakExecution
             )
-     in captureExistentials @ca @e @m outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+     in captureExistentials @ca @e outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
 
-instance Monoid (Advice ca e m r) where
+instance Monad m => Monoid (Advice ca e m r) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
@@ -303,6 +303,7 @@ makeAdvice = Advice (Proxy @u)
 -- :}
 makeArgsAdvice ::
   forall ca e m r.
+  Monad m => 
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
@@ -329,6 +330,7 @@ makeArgsAdvice tweakArgs =
 -- :}
 makeExecutionAdvice ::
   forall ca e m r.
+  Applicative m =>
   -- | The function that tweaks the execution.
   ( 
     DepT e m r ->
@@ -382,7 +384,7 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 -- :}
 advise ::
   forall ca e m r as advisee.
-  (Multicurryable as e m r advisee, All ca as) =>
+  (Multicurryable as e m r advisee, All ca as, Monad m) =>
   -- | The advice to apply.
   Advice ca e m r ->
   -- | A function to be adviced.
@@ -471,7 +473,7 @@ runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 -- Sum {getSum = 0}
 runFromEnv ::
   forall as e m r curried.
-  (Multicurryable as e m r curried, Monad m) =>
+  Multicurryable as e m r curried =>
   -- | action that gets hold of the environment
   m (e (DepT e m)) ->
   -- | gets a function from the environment with effects in 'DepT'
@@ -646,7 +648,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
         forall more less e m r u.
         (forall x. more x :- less x) ->
         Proxy u ->
-        ( forall as e m.
+        ( forall as.
           All less as =>
           NP I as ->
           DepT e m (u, NP I as)
@@ -663,7 +665,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e m (u, NP I as)
                 tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
                   f -> case f (SOP.Dict @(All more) @as) of
-                    SOP.Dict -> \args -> tweakArgs' @as @e @m args
+                    SOP.Dict -> \args -> tweakArgs' @as args
              in tweakArgs''
           )
           tweakExecution'
