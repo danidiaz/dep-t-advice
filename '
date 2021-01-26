@@ -249,7 +249,7 @@ instance Semigroup (Advice ca e m r) where
             )
      in captureExistentials @ca @e @m outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
 
-instance Monoid (Advice ca e m r) where
+instance Monoid (Advice ca cem cr) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
@@ -660,7 +660,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
       captureExistential evidence' _ tweakArgs' tweakExecution' =
         Advice
           (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e m (u, NP I as)
+          ( let tweakArgs'' :: forall as e m. (All more as, cem e m, Monad m) => NP I as -> DepT e m (u, NP I as)
                 tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
                   f -> case f (SOP.Dict @(All more) @as) of
                     SOP.Dict -> \args -> tweakArgs' @as @e @m args
