@@ -478,13 +478,17 @@ runFromEnv = _runFromEnv
 --    normal function constraints—the @ca@ constraints of an 'Advice' aren't
 --    automatically "collected" during composition.
 --
---    Instead, we need to harmonize the @ca@ constraints of each 'Advice' by turning them
---    into the combination of all constraints. 'restrictArgs' helps with that.
+--    Instead, we need to harmonize the @ca@ constraints of each 'Advice' by
+--    turning them into the combination of all constraints. 'restrictArgs'
+--    helps with that.
 --
---    'restrictArgs' takes as parameter evidence of entailment between @ca@
---    constraints, using the type '(:-)' from the \"constraints\" package.  But
---    how to construct such evidence? By using the 'Sub' and the 'Dict'
---    constructors, either with an explicit type signature:
+--    'restrictArgs' takes as parameter value-level "\evidence\" that one
+--    constraint implies another. But how to construct such evidence? By using
+--    the 'Dict' GADT, more precisely the deceptively simple-looking term
+--    @\\Dict -> Dict@. That function "absorbs" some constraint present in the
+--    ambient context and re-packages it a a new constraint that is implied by
+--    the former. We can't rely on type inference here; we need to provide
+--    enough type information to the GADT, be it as an explicit signature:
 --
 -- >>> :{
 --  stricterPrintArgs :: forall e m r. MonadIO m => Advice (Show `And` Eq `And` Ord) NilEnv m r
@@ -500,7 +504,7 @@ runFromEnv = _runFromEnv
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
   forall more less e m r.
-  -- | Evidence that one constraint implies the other.
+  -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
   (forall x. Dict more x -> Dict less x) -> 
   -- | Advice with less restrictive constraint on the args.
   Advice less e m r ->

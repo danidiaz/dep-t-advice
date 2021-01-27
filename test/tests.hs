@@ -29,6 +29,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Prelude hiding (log)
 import Data.Proxy
+import System.IO
 
 -- Some helper typeclasses.
 --
@@ -254,9 +255,8 @@ justAResultConstraint = mempty
 returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
 returnMempty'' = returnMempty <> justAResultConstraint
 
--- 
--- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
--- 
+printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @NilEnv @IO stdout "foo")
+ 
 -- does EnvConstraint compile?
 
 -- type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
