@@ -233,7 +233,16 @@ weirdAdvicedEnv =
 -- doLogging'= restrictEnv (Sub Dict) doLogging
 -- 
 -- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
--- 
+ 
+-- Checking that constraints on the environment and the monad are collected "automatically"
+doLogging' :: forall e m r . (Ensure HasLogger e m, Ensure HasRepository e m, MonadIO m) => Advice Show e m r
+doLogging' = doLogging 
+
+justARepositoryConstraint :: forall ca e m r. (Ensure HasRepository e m, Monad m) => Advice ca e m r
+justARepositoryConstraint = mempty
+
+doLogging'' :: forall e m r . (Ensure HasLogger e m, Ensure HasRepository e m, MonadIO m) => Advice Show e m r
+doLogging'' = doLogging <> justARepositoryConstraint
 
 -- Checking that constraints on the results are collected "automatically"
 returnMempty' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
