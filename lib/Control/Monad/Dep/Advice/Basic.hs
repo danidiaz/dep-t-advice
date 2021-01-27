@@ -116,12 +116,16 @@ printArgs h prefix =
 --  envIO :: Env (DepT Env IO)
 --  envIO = Env 
 --    {
---      _logger1 = \_ -> liftIO $ putStrLn "logger1 ran",
---      _logger2 = \_ -> liftIO $ putStrLn "logger2 ran",
---      _controllerA = \_ -> do e <- ask; logger e "foo",
---      _controllerB = advise @Top 
---                     (doLocally \e@Env{_logger2} -> e {_logger1 = _logger2}) 
---                     \_ -> do e <- ask; logger e "foo" 
+--      _logger1 = 
+--          \_ -> liftIO $ putStrLn "logger1 ran",
+--      _logger2 = 
+--          \_ -> liftIO $ putStrLn "logger2 ran",
+--      _controllerA = 
+--          \_ -> do e <- ask; logger e "foo",
+--      _controllerB = 
+--          advise @Top 
+--          (doLocally \e@Env{_logger2} -> e {_logger1 = _logger2}) 
+--          \_ -> do e <- ask; logger e "foo" 
 --    }
 -- :}
 --
