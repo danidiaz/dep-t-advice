@@ -39,7 +39,7 @@ import Control.Concurrent
 --
 -- Because it doesn't touch the arguments or require some effect from the
 -- environment, this 'Advice' is polymorphic on @ca@ and @cem@.
-returnMempty :: forall ca cem r. Monoid r => Advice ca cem r
+returnMempty :: forall ca e m r. (Monad m, Monoid r) => Advice ca e m r
 returnMempty =
   makeExecutionAdvice
     ( \action -> do
@@ -55,7 +55,7 @@ returnMempty =
 --
 -- Because it doesn't touch the return value of the advised function, this
 -- 'Advice' is polymorphic on @cr@.
-printArgs :: forall r. Handle -> String -> Advice Show (MonadConstraint MonadIO) r
+printArgs :: forall e m r. MonadIO m => Handle -> String -> Advice Show e m r
 printArgs h prefix =
   makeArgsAdvice
     ( \args -> do
@@ -93,7 +93,7 @@ instance Eq AnyEq where
 --
 -- A better implementation of this advice would likely use an @AnyHashable@
 -- helper datatype for the keys.
-doCachingBadly :: forall m r. (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) (MonadConstraint (MustBe m)) r
+doCachingBadly :: forall e m r. Monad m => (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) e m r
 doCachingBadly cacheLookup cachePut =
   makeAdvice @AnyEq
     ( \args ->
@@ -117,7 +117,7 @@ doCachingBadly cacheLookup cachePut =
 -- package instead of bare `forkIO`. 
 --
 -- And the @MustBe IO@ constraint could be relaxed to @MonadUnliftIO@.
-doAsyncBadly :: Advice ca (MonadConstraint (MustBe IO)) ()
+doAsyncBadly :: forall ca e. Advice ca e IO ()
 doAsyncBadly = makeExecutionAdvice (\action -> do
         e <- ask 
         _ <- liftIO $ forkIO $ runDepT action e
