@@ -259,7 +259,7 @@ instance Monad m => Monoid (Advice ca e m r) where
 --  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
 -- :}
 --
---    __/IMPORTANT!/__ When invoking 'makeAdvice', you must always give the
+--    __/TYPE APPLICATION REQUIRED!/__ When invoking 'makeAdvice', you must always give the
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
 makeAdvice ::
@@ -368,7 +368,7 @@ type Ensure c e m = c (e (DepT e m)) (DepT e m)
 --  advisedFoo = advise (printArgs stdout "Foo args: ") foo
 -- :}
 --
--- __/IMPORTANT!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
+-- __/TYPE APPLICATION REQUIRED!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
 -- it must be supplied by means of a type application:
 --
 -- >>> :{

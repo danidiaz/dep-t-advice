@@ -18,6 +18,7 @@ module Control.Monad.Dep.Advice.Basic
   ( -- * Basic advices
     returnMempty,
     printArgs,
+    doLocally,
     AnyEq (..),
     doCachingBadly,
     doAsyncBadly
@@ -34,6 +35,34 @@ import Data.Type.Equality
 import System.IO
 import Type.Reflection
 import Control.Concurrent
+
+-- $setup
+--
+-- >>> :set -XTypeApplications
+-- >>> :set -XStandaloneKindSignatures
+-- >>> :set -XMultiParamTypeClasses
+-- >>> :set -XFunctionalDependencies
+-- >>> :set -XRankNTypes
+-- >>> :set -XTypeOperators
+-- >>> :set -XConstraintKinds
+-- >>> :set -XNamedFieldPuns
+-- >>> :set -XFlexibleContexts
+-- >>> :set -XFlexibleInstances
+-- >>> :set -XAllowAmbiguousTypes
+-- >>> :set -XBlockArguments
+-- >>> import Control.Monad
+-- >>> import Control.Monad.Dep
+-- >>> import Control.Monad.Dep.Advice
+-- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Data.Constraint
+-- >>> import Data.Kind
+-- >>> import Data.SOP
+-- >>> import Data.SOP.NP
+-- >>> import Data.Monoid
+-- >>> import System.IO
+-- >>> import Data.IORef
+
+
 
 -- | Makes functions discard their result and always return 'mempty'.
 --
@@ -65,6 +94,43 @@ printArgs h prefix =
         liftIO $ hFlush h
         pure args
     )
+
+-- | Use 'local' on the final 'DepT' action of a function.
+--
+-- >>> :{
+--  type HasLogger :: Type -> (Type -> Type) -> Constraint
+--  class HasLogger em m | em -> m where
+--    logger :: em -> String -> m ()
+--  type Env :: (Type -> Type) -> Type
+--  data Env m = Env
+--    { _logger1 :: String -> m (),
+--      _logger2 :: String -> m (),
+--      _controllerA :: Int -> m (),
+--      _controllerB :: Int -> m ()
+--    }
+--  instance HasLogger (Env m) m where
+--    logger = _logger1
+--  envIO :: Env (DepT Env IO)
+--  envIO = Env 
+--    {
+--      _logger1 = \_ -> liftIO $ putStrLn "logger1 ran",
+--      _logger2 = \_ -> liftIO $ putStrLn "logger2 ran",
+--      _controllerA = \_ -> do e <- ask; logger e "foo",
+--      _controllerB = advise @Top 
+--                     (doLocally \e@Env{_logger2} -> e {_logger1 = _logger2}) 
+--                     \_ -> do e <- ask; logger e "foo" 
+--    }
+-- :}
+--
+--  >>> runFromEnv (pure envIO) _controllerA 0
+--  logger1 ran
+--
+--  >>> runFromEnv (pure envIO) _controllerB 0
+--  logger2 ran
+--
+doLocally :: forall ca e m r. Monad m => (forall n. e n -> e n) -> Advice ca e m r 
+doLocally transform = makeExecutionAdvice (local transform)  
+
 
 -- | A helper datatype for universal equality comparisons of existentialized values, used by 'doCachingBadly'.
 --
@@ -123,4 +189,5 @@ doAsyncBadly = makeExecutionAdvice (\action -> do
         _ <- liftIO $ forkIO $ runDepT action e
         pure ()
     )
+
 
