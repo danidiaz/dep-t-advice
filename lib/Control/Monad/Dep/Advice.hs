@@ -58,13 +58,16 @@
 -- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
 -- Sum {getSum = 0}
 --
--- And they can be combined using @Advice@'s 'Monoid' instance before being applied
--- (although that might require harmonizing their constraint parameters):
+-- And they can be combined using @Advice@'s 'Monoid' instance before being
+-- applied:
 --
 -- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
+--
+-- Although sometimes composition might require harmonizing the constraints
+-- each 'Advice' places on the arguments, if they differ.
 module Control.Monad.Dep.Advice
   ( -- * The Advice type
     Advice,
@@ -135,28 +138,19 @@ import Data.SOP.NP
 -- >>> import System.IO
 -- >>> import Data.IORef
 
--- | A generic transformation of a 'DepT'-effectful function of any number of
--- arguments, provided the function satisfies certain constraints on the
--- arguments, the environment type constructor and base monad, and the return type.
+-- | A generic transformation of 'DepT'-effectful functions with environment
+-- @e@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
+-- provided the functions satisfy certain constraint @ca@ of kind @Type ->
+-- Constraint@ on all of their arguments.
 --
--- It is parameterized by three constraints:
+-- Note that the environment @e@ must be parameterizable by a monad, and the type
+-- constructor is given unapplied. That is, @Advice Show NilEnv IO ()@
+-- kind-checks but @Advice Show (NilEnv IO) IO ()@ doesn't. See also 'Ensure'.
 --
--- * @ca@ of kind @Type -> Constraint@, the constraint required of each argument (usually something like @Show@).
--- * @cem@ of kind @((Type -> Type) -> Type) -> (Type -> Type) -> Constraint@,
--- a two-place constraint required of the environment type constructor / base
--- monad combination. Note that the environment type constructor remains
--- unapplied. That is, for a given @cem@, @cem NilEnv IO@ kind-checks but @cem
--- (NilEnv IO) IO@ doesn't. See also 'Ensure'.
--- * @cr@ of kind @Type -> Constraint@, the constraint required of the return type.
---
--- We can define 'Advice's that work with concrete types by using 'MustBe' in
--- the case of @ca@ and @cr@, and 'MustBe2' in the case of @cem@.
---
--- 'Advice's that don't care about a particular constraint can leave it
--- polymorphic, and this facilitates composition, but the constraint must be
--- given some concrete value ('Top' in the case of @ca@ and @cr@, 'Top2' in
--- the case of @cem@) through type application at the moment of calling
--- 'advise'.
+-- 'Advice's that don't care about the @ca@ constraint (because they don't
+-- touch function arguments) can leave it polymorphic, and this facilitates
+-- 'Advice' composition, but then the constraint must be given the catch-all
+-- `Top` value (using a type application) at the moment of calling 'advise'.
 --
 -- See "Control.Monad.Dep.Advice.Basic" for examples.
 type Advice ::
@@ -342,34 +336,45 @@ data Pair a b = Pair !a !b
 --    logger :: em -> String -> m ()
 -- :}
 --
--- To work as the @cem@ constraint, like this:
+-- To work as a constraints on the @e@ and @m@ parameters of an 'Advice', like this:
 --
--- XXXXXXXXXXXXXXXXXXXX
+-- >>> :{ 
+--  requiresLogger :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
+--  requiresLogger = mempty
+--  :}
 --
 -- Why is it necessary? Two-place @HasX@-style constraints receive the \"fully
 -- applied\" type of the record-of-functions. That is: @NilEnv IO@ instead of
--- simply @NilEnv@. This allows them to also work with monomorphic
--- environments (like those in <http://hackage.haskell.org/package/rio RIO>) whose type isn't parameterized by any monad.
+-- simply @NilEnv@. This allows them to also work with monomorphic environments
+-- (like those in <http://hackage.haskell.org/package/rio RIO>) whose type
+-- isn't parameterized by any monad.
 --
--- But the @cem@ constraint works with the type constructor of the environment
--- record, of kind @(Type -> Type) -> Type@, and not with the fully applied
--- type of kind @Type@.
+-- But the @e@ type parameter of 'Advice' has kind @(Type -> Type) -> Type@.
+-- That is: @NilEnv@ alone.
+--
+-- Furthermore, 'Advices' require @HasX@-style constraints to be placed on the
+-- @DepT@ transformer, not directly on the base monad @m@. @Ensure@ takes care
+-- of that as well.
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 type Ensure c e m = c (e (DepT e m)) (DepT e m) 
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
--- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
---
--- __/IMPORTANT!/__ If the @ca@, @cem@ or @cr@ constraints of the supplied
--- 'Advice' remain polymorphic, they must be given types by means of type
--- applications:
+-- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
 --  foo :: Int -> DepT NilEnv IO String
 --  foo _ = pure "foo"
---  advisedFoo1 = advise (returnMempty @Top) foo
---  advisedFoo2 = advise @Top returnMempty foo
---  advisedFoo3 = advise (printArgs stdout "args: ") foo
+--  advisedFoo = advise (printArgs stdout "Foo args: ") foo
+-- :}
+--
+-- __/IMPORTANT!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
+-- it must be supplied by means of a type application:
+--
+-- >>> :{
+--  bar :: Int -> DepT NilEnv IO String
+--  bar _ = pure "bar"
+--  advisedBar1 = advise (returnMempty @Top) bar
+--  advisedBar2 = advise @Top returnMempty bar
 -- :}
 advise ::
   forall ca e m r as advisee.
