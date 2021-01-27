@@ -97,6 +97,9 @@ printArgs h prefix =
 
 -- | Use 'local' on the final 'DepT' action of a function.
 --
+-- Allows tweaking the environment that will be seen by the function and all of
+-- its sub-calls.
+--
 -- >>> :{
 --  type HasLogger :: Type -> (Type -> Type) -> Constraint
 --  class HasLogger em m | em -> m where
