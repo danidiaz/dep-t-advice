@@ -234,8 +234,17 @@ weirdAdvicedEnv =
 -- 
 -- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
 -- 
--- returnMempty' :: Advice ca cem (Monoid `And` Show)
--- returnMempty' = restrictResult (Sub Dict) returnMempty
+
+-- Checking that constraints on the results are collected "automatically"
+returnMempty' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
+returnMempty' = returnMempty
+
+justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => Advice ca e m r
+justAResultConstraint = mempty
+
+returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
+returnMempty'' = returnMempty <> justAResultConstraint
+
 -- 
 -- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
 -- 
