@@ -80,7 +80,7 @@ Advices are parameterized by the constraints they require of the function:
 
 Here's how a `printArgs` advice might be defined:
 
-    printArgs :: forall cr. Handle -> String -> Advice Show (BaseConstraint MonadIO) cr
+    printArgs :: forall e m r. MonadIO m => Handle -> String -> Advice Show e m r
     printArgs h prefix =
       makeArgsAdvice
         ( \args -> do
@@ -99,11 +99,7 @@ product. This makes the advice work for any number of parameters.
 
 The advice would be applied like this:
 
-    advise (printArgs @Top stdout "foo args: ") foo
-
-The `@Top` type application is necessary because `printArgs` is polymorphic on
-the `cr` constraint on the function results, and the `advise` function requires
-all the constraints to be "concrete" in order to apply the advice. 
+    advise (printArgs stdout "foo args: ") foo
 
 ## Advices should be applied at the composition root
 
