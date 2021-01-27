@@ -357,9 +357,7 @@ data Pair a b = Pair !a !b
 -- record, of kind @(Type -> Type) -> Type@, and not with the fully applied
 -- type of kind @Type@.
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c (e (DepT e m)) (DepT e m) => Ensure c e m
-
-instance c (e (DepT e m)) (DepT e m) => Ensure c e m
+type Ensure c e m = c (e (DepT e m)) (DepT e m) 
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and satisfy the constraints required by the 'Advice'.
