@@ -83,9 +83,7 @@ module Control.Monad.Dep.Advice
 
     -- * Combining Advices by harmonizing their constraints
     -- $restrict
-    -- restrictArgs,
-    -- restrictEnv,
-    -- restrictResult,
+    restrictArgs,
 
     -- * Invocation helpers
     -- $invocation
@@ -396,13 +394,13 @@ type Multicurryable ::
   Type ->
   Constraint
 class Multicurryable as e m r curried | curried -> as e m r where
-  type BaseMonadAtTheTip as e m r curried :: Type
+  type DownToBaseMonad as e m r curried :: Type
   multiuncurry :: curried -> NP I as -> DepT e m r
   multicurry :: (NP I as -> DepT e m r) -> curried
-  _runFromEnv :: m (e (DepT e m)) -> (e (DepT e m) -> curried) -> BaseMonadAtTheTip as e m r curried
+  _runFromEnv :: m (e (DepT e m)) -> (e (DepT e m) -> curried) -> DownToBaseMonad as e m r curried
 
 instance Monad m => Multicurryable '[] e m r (DepT e m r) where
-  type BaseMonadAtTheTip '[] e m r (DepT e m r) = m r
+  type DownToBaseMonad '[] e m r (DepT e m r) = m r
   multiuncurry action Nil = action
   multicurry f = f Nil
   _runFromEnv producer extractor = do
@@ -410,7 +408,7 @@ instance Monad m => Multicurryable '[] e m r (DepT e m r) where
     runDepT (extractor e) e
 
 instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
-  type BaseMonadAtTheTip (a ': as) e m r (a -> curried) = a -> BaseMonadAtTheTip as e m r curried
+  type DownToBaseMonad (a ': as) e m r (a -> curried) = a -> DownToBaseMonad as e m r curried
   multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
   multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
   _runFromEnv producer extractor a = _runFromEnv @as @e @m @r @curried producer (\f -> extractor f a)
@@ -432,7 +430,7 @@ runFinalDepT ::
   -- | function to invoke with effects in 'DepT'
   curried ->
   -- | a new function with effects in the base monad
-  BaseMonadAtTheTip as e m r curried
+  DownToBaseMonad as e m r curried
 runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
@@ -470,7 +468,7 @@ runFromEnv ::
   -- | gets a function from the environment with effects in 'DepT'
   (e (DepT e m) -> curried) ->
   -- | a new function with effects in the base monad
-  BaseMonadAtTheTip as e m r curried
+  DownToBaseMonad as e m r curried
 runFromEnv = _runFromEnv
 
 -- $restrict
