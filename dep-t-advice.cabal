@@ -36,6 +36,14 @@ common common-tests
                        mtl                ^>= 2.2,
                        template-haskell,
 
+
+common common-tasty
+  import:              common-tests
+  hs-source-dirs:      test
+  build-depends:       
+                       tasty              >= 1.3.1,
+                       tasty-hunit        >= 0.10.0.2,
+
 library
   import: common
   exposed-modules:     Control.Monad.Dep.Advice
@@ -43,13 +51,14 @@ library
   hs-source-dirs:      lib 
 
 test-suite tests
-  import:              common-tests
+  import:              common-tasty
   type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
   main-is:             tests.hs
-  build-depends:       
-                       tasty              >= 1.3.1,
-                       tasty-hunit        >= 0.10.0.2,
+
+test-suite weird-advice-tests
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             weird-advice-tests.hs
 
 -- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
 -- http://hackage.haskell.org/package/cabal-doctest
