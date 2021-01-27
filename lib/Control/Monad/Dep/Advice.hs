@@ -126,6 +126,7 @@ import Data.SOP.NP
 -- >>> :set -XTypeOperators
 -- >>> :set -XConstraintKinds
 -- >>> :set -XNamedFieldPuns
+-- >>> :set -XFlexibleContexts
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
@@ -479,21 +480,29 @@ runFromEnv = _runFromEnv
 -- $restrict
 --
 --    'Advice' values can be composed using the 'Monoid' instance, but only if
---    the have the same constraint parameters. It's unfortunate that—unlike with
---    normal functions—'Advice' constaints aren't automatically "collected"
---    during composition.
+--    they have the same type parameters. It's unfortunate that—unlike with
+--    normal function constraints—the @ca@ constraints of an 'Advice' aren't
+--    automatically "collected" during composition.
 --
---    We need to harmonize the constraints on each 'Advice' by turning them
---    into the combination of all constraints. The functions in this section
+--    Instead, we need to harmonize the @ca@ constraints of each 'Advice' by turning them
+--    into the combination of all constraints. 'restrictArgs' help with that.
 --    help with that.
 --
---    These functions take as parameter evidence of entailment between
+--    'restrictArgs' takes as parameter evidence of entailment between @ca@
 --    constraints, using the type '(:-)' from the \"constraints\" package.  But
 --    how to construct such evidence? By using the 'Sub' and the 'Dict'
---    constructors, with either an explicit type signature:
+--    constructors, either with an explicit type signature:
 --
---    XXXXXXXXXXXXXXXXXXXXXX
-
+-- >>> :{
+--  stricterPrintArgs :: forall e m r. MonadIO m => Advice (Show `And` Eq `And` Ord) NilEnv m r
+--  stricterPrintArgs = restrictArgs (Sub Dict) (printArgs stdout "foo")
+-- :}
+--
+--    or with a type application to 'restrictArgs':
+--
+-- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (Sub Dict) (printArgs stdout "foo")
+--
+--
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -565,18 +574,16 @@ translateEvidence evidence SOP.Dict =
 -- 'Dict' and '(:-)' are GADTs used to capture and transform constraints. Used in the 'restrictArgs' function.
 
 -- $constrainthelpers
--- Some  <https://www.reddit.com/r/haskell/comments/ab8ypl/monthly_hask_anything_january_2019/edk1ot3/ class synonyms>
--- to help create the constraints that parameterize the 'Advice' type.
 --
--- This library also re-exports the 'Top', 'And' and 'All' helpers from \"sop-core\":
+-- To help with the constraint @ca@ that parameterizes 'Advice', this library re-exports the following helpers from \"sop-core\":
 --
--- * 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific in @ca@ or @cr@ (@cem@ requires 'Top2').
+-- * 'Top' is the \"always satisfied\" constraint, useful when whe don't want to require anything specific in @ca@.
 --
--- * 'And' combines constraints for @ca@ or @cr@ (@cem@ requires 'And2').
+-- * 'And' combines two constraints so that an 'Advice' can request them both, for example @Show \`And\` Eq@.
 --
--- * 'All' says that some constraint is satisfied by all the components of an 'NP'
--- product. In this library, it's used to stipulate constraints on the
--- arguments of advised functions.
+-- Also, the 'All' constraint says that some constraint is satisfied by all the
+-- components of an 'NP' product. It's in scope when processing the function
+-- arguments inside an 'Advice'.
 
 -- $invocation
 -- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
