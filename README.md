@@ -78,7 +78,7 @@ Advices can't change the type of a function, but they might:
 
 - Change the result value of the function.
 
-- Sidestep the execution of the function altogeher, providing al alternative result.
+- Sidestep the execution of the function altogether, providing al alternative result.
 
 Here's how a `printArgs` advice might be defined:
 
