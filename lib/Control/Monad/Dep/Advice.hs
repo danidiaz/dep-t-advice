@@ -126,7 +126,6 @@ import Data.SOP.NP
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
 -- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
--- >>> import Data.Constraint
 -- >>> import Data.Kind
 -- >>> import Data.SOP
 -- >>> import Data.SOP.NP
@@ -489,12 +488,12 @@ runFromEnv = _runFromEnv
 --
 -- >>> :{
 --  stricterPrintArgs :: forall e m r. MonadIO m => Advice (Show `And` Eq `And` Ord) NilEnv m r
---  stricterPrintArgs = restrictArgs (Sub Dict) (printArgs stdout "foo")
+--  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --
 --    or with a type application to 'restrictArgs':
 --
--- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (Sub Dict) (printArgs stdout "foo")
+-- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
 --
 --
 
