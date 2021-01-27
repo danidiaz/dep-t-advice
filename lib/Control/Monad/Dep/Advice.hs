@@ -101,19 +101,14 @@ module Control.Monad.Dep.Advice
     NP (..),
     I (..),
     cfoldMap_NP,
-
-    -- * "constraints" re-exports
-    -- $constraints
-    type (:-) (..),
-    Dict (..),
+    Dict (..)
   )
 where
 
 import Control.Monad.Dep
-import Data.Constraint
 import Data.Kind
 import Data.SOP
-import Data.SOP.Dict qualified as SOP
+import Data.SOP.Dict
 import Data.SOP.NP
 
 -- $setup
@@ -507,7 +502,7 @@ runFromEnv = _runFromEnv
 restrictArgs ::
   forall more less e m r.
   -- | Evidence that one constraint implies the other.
-  (forall x. more x :- less x) ->
+  (forall x. Dict more x -> Dict less x) -> 
   -- | Advice with less restrictive constraint on the args.
   Advice less e m r ->
   -- | Advice with more restrictive constraint on the args.
@@ -523,7 +518,7 @@ restrictArgs ::
 restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
         forall more less e m r u.
-        (forall x. more x :- less x) ->
+        (forall x. Dict more x -> Dict less x) ->
         Proxy u ->
         ( forall as.
           All less as =>
@@ -540,19 +535,13 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
         Advice
           (Proxy @u)
           ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e m (u, NP I as)
-                tweakArgs'' = case SOP.mapAll @more @less (translateEvidence @more @less evidence') of
-                  f -> case f (SOP.Dict @(All more) @as) of
-                    SOP.Dict -> \args -> tweakArgs' @as args
+                tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
+                  f -> case f (Dict @(All more) @as) of
+                    Dict -> \args -> tweakArgs' @as args
              in tweakArgs''
           )
           tweakExecution'
    in captureExistential evidence proxy tweakArgs tweakExecution
-
-
-translateEvidence :: forall more less a. (forall x. more x :- less x) -> SOP.Dict more a -> SOP.Dict less a
-translateEvidence evidence SOP.Dict =
-  case evidence @a of
-    Sub Dict -> SOP.Dict @less @a
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
