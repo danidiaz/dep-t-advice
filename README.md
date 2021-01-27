@@ -70,13 +70,15 @@ The `Advice` datatype provided by this package encapsulates a transformation on
 arguments*. The same advice will work for functions with `0`, `1` or `N`
 arguments.
 
-Advices are parameterized by the constraints they require of the function:
+Advices can't change the type of a function, but they might:
 
-- The function arguments. "All the arguments must be showable".
-- The `DepT` environment and the base monad. "The environment must have a
-  logger, and the base monad must have a `MonadIO` instance."
-- The function return type. "The function must return a type that is a
-  `Monoid`."
+- Analyze and change the values of the function's arguments.
+
+- Add additional effects to the function, either effects from the base monad, or effects from handlers found in the environment.
+
+- Change the result value of the function.
+
+- Sidestep the execution of the function altogeher, providing al alternative result.
 
 Here's how a `printArgs` advice might be defined:
 

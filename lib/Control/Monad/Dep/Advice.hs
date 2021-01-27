@@ -144,9 +144,9 @@ import Data.SOP.NP
 -- provided the functions satisfy certain constraint @ca@ of kind @Type ->
 -- Constraint@ on all of their arguments.
 --
--- Note that the environment @e@ must be parameterizable by a monad, and the type
--- constructor is given unapplied. That is, @Advice Show NilEnv IO ()@
--- kind-checks but @Advice Show (NilEnv IO) IO ()@ doesn't. See also 'Ensure'.
+-- Note that the type constructor for the environment @e@ is given unapplied.
+-- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
+-- IO ()@ doesn't. See also 'Ensure'.
 --
 -- 'Advice's that don't care about the @ca@ constraint (because they don't
 -- touch function arguments) can leave it polymorphic, and this facilitates
@@ -485,8 +485,7 @@ runFromEnv = _runFromEnv
 --    automatically "collected" during composition.
 --
 --    Instead, we need to harmonize the @ca@ constraints of each 'Advice' by turning them
---    into the combination of all constraints. 'restrictArgs' help with that.
---    help with that.
+--    into the combination of all constraints. 'restrictArgs' helps with that.
 --
 --    'restrictArgs' takes as parameter evidence of entailment between @ca@
 --    constraints, using the type '(:-)' from the \"constraints\" package.  But
