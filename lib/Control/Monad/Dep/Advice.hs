@@ -81,7 +81,7 @@ module Control.Monad.Dep.Advice
     -- $constrainthelpers
     Ensure,
 
-    -- * Combining Advices by harmonizing their constraints
+    -- * Harmonizing Advice argument constraints
     -- $restrict
     restrictArgs,
 
@@ -557,7 +557,7 @@ translateEvidence evidence SOP.Dict =
 --
 -- Some useful definitions re-exported the from \"constraints\" package.
 --
--- 'Dict' and '(:-)' are GADTs used to capture and transform constraints. Used in the 'restrictArgs', 'restrictEnv' and 'restrictResult' functions.
+-- 'Dict' and '(:-)' are GADTs used to capture and transform constraints. Used in the 'restrictArgs' function.
 
 -- $constrainthelpers
 -- Some  <https://www.reddit.com/r/haskell/comments/ab8ypl/monthly_hask_anything_january_2019/edk1ot3/ class synonyms>
