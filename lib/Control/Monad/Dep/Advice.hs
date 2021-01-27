@@ -36,26 +36,26 @@
 --
 -- They work for @DepT@-actions of zero arguments:
 --
--- >>> advise (printArgs @Top stdout "foo0") foo0 `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo0") foo0 `runDepT` NilEnv
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- And for functions of one or more arguments, provided they end on a @DepT@-action:
 --
--- >>> advise (printArgs @Top stdout "foo1") foo1 False `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo1") foo1 False `runDepT` NilEnv
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> advise (printArgs @Top stdout "foo2") foo2 'd' False `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> advise (returnMempty @Top @Top2) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being applied
@@ -80,12 +80,6 @@ module Control.Monad.Dep.Advice
     -- * Constraint helpers
     -- $constrainthelpers
     Ensure,
-    Top2,
-    And2,
-    MonadConstraint,
-    EnvConstraint,
-    MustBe,
-    MustBe2,
 
     -- * Combining Advices by harmonizing their constraints
     -- $restrict
@@ -268,7 +262,7 @@ instance Monad m => Monoid (Advice ca e m r) where
 --    type @u@ calculated earlier.
 --
 -- >>> :{
---  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
 -- :}
 --
@@ -298,7 +292,7 @@ makeAdvice = Advice (Proxy @u)
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
@@ -325,7 +319,7 @@ makeArgsAdvice tweakArgs =
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca cem cr. Advice ca cem cr
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
@@ -352,7 +346,7 @@ data Pair a b = Pair !a !b
 --
 -- To work as the @cem@ constraint, like this:
 --
--- >>> type FooAdvice = Advice Top (Ensure HasLogger) Top
+-- XXXXXXXXXXXXXXXXXXXX
 --
 -- Why is it necessary? Two-place @HasX@-style constraints receive the \"fully
 -- applied\" type of the record-of-functions. That is: @NilEnv IO@ instead of
@@ -377,10 +371,9 @@ instance c (e (DepT e m)) (DepT e m) => Ensure c e m
 -- >>> :{
 --  foo :: Int -> DepT NilEnv IO String
 --  foo _ = pure "foo"
---  advisedFoo1 = advise (returnMempty @Top @Top2) foo
---  advisedFoo2 = advise @Top @Top2 returnMempty foo
---  advisedFoo3 = advise (printArgs @Top stdout "args: ") foo
---  advisedFoo4 = advise @_ @_ @Top (printArgs stdout "args: ") foo
+--  advisedFoo1 = advise (returnMempty @Top) foo
+--  advisedFoo2 = advise @Top returnMempty foo
+--  advisedFoo3 = advise (printArgs stdout "args: ") foo
 -- :}
 advise ::
   forall ca e m r as advisee.
@@ -465,7 +458,7 @@ runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 --      let foo' = runFromEnv (readIORef envRef) _foo
 --      do r <- foo' 7
 --         print r
---      modifyIORef envRef (\e -> e { _foo = advise @Top @Top2 returnMempty (_foo e) })
+--      modifyIORef envRef (\e -> e { _foo = advise @Top returnMempty (_foo e) })
 --      do r <- foo' 7
 --         print r
 -- :}
@@ -481,106 +474,6 @@ runFromEnv ::
   -- | a new function with effects in the base monad
   BaseMonadAtTheTip as e m r curried
 runFromEnv = _runFromEnv
-
--- |
---    A two-place constraint which requires nothing of the environment and the
---    base monad.
---
---    Useful as the @cem@ type application argument of 'advise' and 'restrictEnv'.
---
---    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
---    'restrictEnv', use 'Top' from \"sop-core\".
---
--- >>> type UselessAdvice = Advice Top Top2 Top
-type Top2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class Top2 e m
-
-instance Top2 e m
-
--- |
---    Combines two two-place constraints on the environment / monad pair.
---
---    For example, an advice which requires both @Ensure HasLogger@ and @Ensure
---    HasRepository@ might use this.
---
---    Useful to build the @cem@ type application argument of 'advise' and
---    'restrictEnv'.
---
---    For similar behavior with the @ar@ and @cr@ type arguments of 'advise' and
---    'restrictEnv', use 'And' from \"sop-core\".
-type And2 ::
-  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
-  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint) ->
-  (((Type -> Type) -> Type) -> (Type -> Type) -> Constraint)
-class (f e m, g e m) => (f `And2` g) e m
-
-instance (f e m, g e m) => (f `And2` g) e m
-
-infixl 7 `And2`
-
--- | A class synonym for @(~)@, the type equality constraint.
---
--- Poly-kinded, so it can be applied both to type constructors (like monads) and to concrete types.
---
--- It this library it will be used partially applied:
---
--- >>> type FooAdvice = Advice Top (MonadConstraint (MustBe IO)) Top
---
--- >>>  type FooAdvice = Advice Top Top2 (MustBe String)
-type MustBe :: forall k. k -> k -> Constraint
-class x ~ y => MustBe x y
-
-instance x ~ y => MustBe x y
-
--- |
--- Pins both the environment type constructor and the base monad. Sometimes we
--- don't want to advise functions in some generic environment, but in a
--- concrete environment having access to all the fields, and in a concrete base
--- monad.
---
--- Useful to build the @cem@ type application argument of 'advise' and
--- 'restricEnv'.
---
--- For similar behavior with the @ar@ and @cr@ type arguments of 'advise'
--- and 'restrictEnv', use 'MustBe'.
---
--- It this library it will be used partially applied:
---
--- >>> type FooAdvice = Advice Top (MustBe2 NilEnv IO) Top
-type MustBe2 :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class (e' ~ e, m' ~ m) => MustBe2 e' m' e m
-
-instance (e' ~ e, m' ~ m) => MustBe2 e' m' e m
-
--- |
---    Require a constraint only on the /unapplied/ environment type constructor, which has kind @(Type -> Type) -> Type@.
---
---    Can be used to build @cem@ type application argument of 'advise' and 'restrictEnv'.
---
---    Most of the time this is /not/ what you want. One exception is when
---    pinning the environment with a 'MustBe' equality constraint, while
---    leaving the base monad free:
---
---    >>> type FooAdvice = Advice Top (EnvConstraint (MustBe NilEnv)) Top
---
---    If what you want is to lift a two-parameter @HasX@-style typeclass to @cem@, use 'Ensure' instead.
-type EnvConstraint :: (((Type -> Type) -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c e => EnvConstraint c e m
-
-instance c e => EnvConstraint c e m
-
--- |
---    Require a constraint only on the base monad, for example a base moonad with @MonadIO@.
---
---    Useful to build @cem@ type application argument of 'advise' and 'restrictEnv'.
---
---    >>> type FooAdvice = Advice Top (MonadConstraint MonadIO) Top
---
---    >>> type FooAdvice = Advice Top (MonadConstraint (MonadReader Int)) Top
-type MonadConstraint :: ((Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-class c m => MonadConstraint c e m
-
-instance c m => MonadConstraint c e m
 
 -- $restrict
 --
@@ -598,32 +491,7 @@ instance c m => MonadConstraint c e m
 --    how to construct such evidence? By using the 'Sub' and the 'Dict'
 --    constructors, with either an explicit type signature:
 --
--- >>> :{
--- returnMempty' :: Advice ca cem (Monoid `And` Show)
--- returnMempty' = restrictResult (Sub Dict) returnMempty
--- :}
---
--- or with a type application to the restriction function:
---
--- >>> :{
--- returnMempty'' :: Advice ca cem (Monoid `And` Show)
--- returnMempty'' = restrictResult @(Monoid `And` Show) (Sub Dict) returnMempty
--- :}
---
--- Another example:
---
--- >>> :{
---  type HasLogger :: Type -> (Type -> Type) -> Constraint
---  class HasLogger em m | em -> m where
---    logger :: em -> String -> m ()
---  doLogging :: Advice Show (Ensure HasLogger) cr
---  doLogging = undefined
---  type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
---  type EnsureLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint MonadIO
---  doLogging':: Advice Show EnsureLoggerAndWriter cr
---  doLogging'= restrictEnv (Sub Dict) doLogging
---  doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
--- :}
+--    XXXXXXXXXXXXXXXXXXXXXX
 
 
 -- | Makes the constraint on the arguments more restrictive.

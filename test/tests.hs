@@ -225,8 +225,8 @@ weirdAdvicedEnv =
          _logger = advise @(Show `And` Eq) (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
        }
 
-type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-type EnsureLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint (MonadWriter TestTrace)
+-- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+-- type EnsureLoggerAndWriter = Ensure HasLogger `And2` MonadConstraint (MonadWriter TestTrace)
 
 -- to ways to invoke restrict functions
 -- doLogging':: Advice Show EnsureLoggerAndWriter cr
