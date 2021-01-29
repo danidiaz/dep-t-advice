@@ -70,3 +70,14 @@ test-suite doctests
   build-depends:       
                        doctest            ^>= 0.17 
                        
+ -- https://cabal.readthedocs.io/en/3.4/cabal-package.html#benchmarks
+benchmark benchmark
+  import:              common-tests, 
+  type:                exitcode-stdio-1.0
+  ghc-options:         -O2
+  hs-source-dirs:      benchmark
+  main-is:             benchmarks.hs
+  build-depends:
+                       criterion ^>= 1.5,  
+
+
