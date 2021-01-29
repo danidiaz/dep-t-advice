@@ -171,7 +171,7 @@ data Advice ca e m r where
     Advice ca e m r
 
 -- |
---    Aspects compose \"sequentially\" when tweaking the arguments, and
+--    'Advice's compose \"sequentially\" when tweaking the arguments, and
 --    \"concentrically\" when tweaking the final 'DepT' action.
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
