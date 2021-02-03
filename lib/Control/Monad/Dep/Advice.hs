@@ -561,13 +561,12 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
   type Deceived (a ': as) newtyped e m r (a -> curried) = a -> Deceived as newtyped e m r curried
   _deceive f g a = deceive @as @newtyped @e @m @r f (g a)
 
--- | Makes a function see a newtyped version of the environment record, one possibly having different @HasX@ instances.
+-- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
--- Note that the \"deception\" doesn't affect the dependencies used by the function, only the function itself.
+-- The \"deception\" doesn't affect the dependencies used by the function, only the function itself.
 --
--- For example, consider the following setup in which both @_controllerA@ and
--- the \"deceived\" @_controllerB@ call the logger, and call an @_intermediate@ function
--- which also logs:
+-- For example, consider the following setup which features both a \"deceviced\"
+-- and an \"undeceived\" version of a controller function:
 --
 -- >>> :{
 --  type HasLogger :: (Type -> Type) -> Type -> Constraint
@@ -594,10 +593,10 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 --    logger (Switcheroo e) = _logger2 e
 --  env :: Env (DepT Env (Writer [String]))
 --  env = 
---    let controller' :: forall d e m. MonadDep [HasLogger, HasIntermediate] d e m => String -> m () 
---        controller' _ = do e <- ask; liftD $ logger e "foo" ; liftD $ intermediate e "foo"
---        intermediate' :: forall d e m. MonadDep '[HasLogger] d e m => String -> m () 
---        intermediate' _ = do e <- ask ; liftD $ logger e "foo" 
+--    let mkController :: forall d e m. MonadDep [HasLogger, HasIntermediate] d e m => Int -> m () 
+--        mkController _ = do e <- ask; liftD $ logger e "foo" ; liftD $ intermediate e "foo"
+--        mkIntermediate :: forall d e m. MonadDep '[HasLogger] d e m => String -> m () 
+--        mkIntermediate _ = do e <- ask ; liftD $ logger e "foo" 
 --     in Env 
 --        {
 --          _logger1 = 
@@ -605,22 +604,31 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 --          _logger2 = 
 --             \_ -> tell ["logger 2"],
 --          _intermediate =
---             intermediate', 
+--             mkIntermediate, 
 --          _controllerA = 
---             controller',
+--             mkController,
 --          _controllerB = 
 --             deceive Switcheroo $
---             controller'
+--             mkController
 --        }
 -- :}
 --
+-- If we run @_controllerA@ the ouput is:
+--
+-- >>> execWriter $ runFromEnv (pure env) _controllerA 7
+-- ["logger 1","logger 1"]
+--
+-- But if we run the \"deceived\" @_controllerB@, we see that the function and its @_intermediate@ dependency use different loggers:
+--
+-- >>> execWriter $ runFromEnv (pure env) _controllerB 7
+-- ["logger 2","logger 1"]
 --
 deceive ::
   forall as newtyped e m r curried.
   Deceivable as newtyped e m r curried =>
   -- | The newtype constructor that masks the \"true\" environment.
   (e (DepT e m) -> newtyped) ->
-  -- | A function to be deceived. It should be polymorphic over 'Control.Monad.Dep.MonadDep'.
+  -- | A function to be deceived. It must be polymorphic over 'Control.Monad.Dep.MonadDep'.
   Deceived as newtyped e m r curried ->
   -- | The deceived function, that has effects in 'DepT'.
   curried
