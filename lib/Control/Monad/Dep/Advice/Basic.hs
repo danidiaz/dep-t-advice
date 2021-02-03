@@ -97,7 +97,11 @@ printArgs h prefix =
 -- | Use 'local' on the final 'DepT' action of a function.
 --
 -- Allows tweaking the environment that will be seen by the function and all of
--- its sub-calls.
+-- its sub-calls into dependencies. 
+--
+-- Note that perhaps this is __not__ what you want; often it's better to tweak
+-- the environment for the current function only. For those cases,
+-- 'Control.Monad.Dep.Advice.deceive' might be a better fit. 
 --
 -- >>> :{
 --  type HasLogger :: Type -> (Type -> Type) -> Constraint

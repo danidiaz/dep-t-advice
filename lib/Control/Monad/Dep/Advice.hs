@@ -623,6 +623,10 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 -- >>> execWriter $ runFromEnv (pure env) _controllerB 7
 -- ["logger 2","logger 1"]
 --
+-- Note that the function that is \"deceived\" must be polymorphic over
+-- 'Control.Monad.Dep.MonadDep'. Passing a function whose effect monad has
+-- already \"collapsed\" into 'DepT' won't work. Therefore, 'deceive' must be applied before any 'Advice'.
+--
 deceive ::
   forall as newtyped e m r curried.
   Deceivable as newtyped e m r curried =>
