@@ -109,7 +109,7 @@ module Control.Monad.Dep.Advice
 where
 
 import Control.Monad.Dep
-import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Reader (ReaderT(..),withReaderT)
 import Data.Kind
 import Data.SOP
 import Data.SOP.Dict
@@ -126,10 +126,15 @@ import Data.SOP.NP
 -- >>> :set -XConstraintKinds
 -- >>> :set -XNamedFieldPuns
 -- >>> :set -XFlexibleContexts
+-- >>> :set -XDerivingStrategies
+-- >>> :set -XGeneralizedNewtypeDeriving
+-- >>> :set -XDataKinds
+-- >>> :set -XScopedTypeVariables
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
 -- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Writer
 -- >>> import Data.Kind
 -- >>> import Data.SOP
 -- >>> import Data.SOP.NP
@@ -556,6 +561,60 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
   type Deceived (a ': as) newtyped e m r (a -> curried) = a -> Deceived as newtyped e m r curried
   _deceive f g a = deceive @as @newtyped @e @m @r f (g a)
 
+-- | Makes a function see a newtyped version of the environment record, one possibly having different @HasX@ instances.
+--
+-- Note that the \"deception\" doesn't affect the dependencies used by the function, only the function itself.
+--
+-- For example, consider the following setup in which both @_controllerA@ and
+-- the \"deceived\" @_controllerB@ call the logger, and call an @_intermediate@ function
+-- which also logs:
+--
+-- >>> :{
+--  type HasLogger :: (Type -> Type) -> Type -> Constraint
+--  class HasLogger m em | em -> m where
+--    logger :: em -> String -> m ()
+--  type HasIntermediate :: (Type -> Type) -> Type -> Constraint
+--  class HasIntermediate m em | em -> m where
+--    intermediate :: em -> String -> m ()
+--  type Env :: (Type -> Type) -> Type
+--  data Env m = Env
+--    { _logger1 :: String -> m (),
+--      _logger2 :: String -> m (),
+--      _intermediate :: String -> m (),
+--      _controllerA :: Int -> m (),
+--      _controllerB :: Int -> m ()
+--    }
+--  instance HasLogger m (Env m) where
+--    logger = _logger1
+--  instance HasIntermediate m (Env m) where
+--    intermediate = _intermediate
+--  newtype Switcheroo m = Switcheroo (Env m) 
+--      deriving newtype (HasIntermediate m)
+--  instance HasLogger m (Switcheroo m) where
+--    logger (Switcheroo e) = _logger2 e
+--  env :: Env (DepT Env (Writer [String]))
+--  env = 
+--    let controller' :: forall d e m. MonadDep [HasLogger, HasIntermediate] d e m => String -> m () 
+--        controller' _ = do e <- ask; liftD $ logger e "foo" ; liftD $ intermediate e "foo"
+--        intermediate' :: forall d e m. MonadDep '[HasLogger] d e m => String -> m () 
+--        intermediate' _ = do e <- ask ; liftD $ logger e "foo" 
+--     in Env 
+--        {
+--          _logger1 = 
+--             \_ -> tell ["logger 1"],
+--          _logger2 = 
+--             \_ -> tell ["logger 2"],
+--          _intermediate =
+--             intermediate', 
+--          _controllerA = 
+--             controller',
+--          _controllerB = 
+--             deceive Switcheroo $
+--             controller'
+--        }
+-- :}
+--
+--
 deceive ::
   forall as newtyped e m r curried.
   Deceivable as newtyped e m r curried =>
