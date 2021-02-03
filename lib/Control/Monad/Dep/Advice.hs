@@ -570,11 +570,11 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 --
 -- >>> :{
 --  type HasLogger :: (Type -> Type) -> Type -> Constraint
---  class HasLogger m em | em -> m where
---    logger :: em -> String -> m ()
+--  class HasLogger d ed | ed -> d where
+--    logger :: ed -> String -> d ()
 --  type HasIntermediate :: (Type -> Type) -> Type -> Constraint
---  class HasIntermediate m em | em -> m where
---    intermediate :: em -> String -> m ()
+--  class HasIntermediate d ed | ed -> d where
+--    intermediate :: ed -> String -> d ()
 --  type Env :: (Type -> Type) -> Type
 --  data Env m = Env
 --    { _logger1 :: String -> m (),
