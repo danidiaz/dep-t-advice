@@ -12,6 +12,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
 
 module Main (main) where
 
@@ -36,29 +37,29 @@ import System.IO
 -- Has-style typeclasses can be provided to avoid depending on concrete
 -- environments.
 -- Note that the environment determines the monad.
-type HasLogger :: Type -> (Type -> Type) -> Constraint
-class HasLogger r m | r -> m where
-  logger :: r -> String -> m ()
+type HasLogger :: (Type -> Type) -> Type -> Constraint
+class HasLogger d r | r -> d where
+  logger :: r -> String -> d ()
 
 -- Possible convenience function to avoid having to use ask before logging
 -- Worth the extra boilerplate, or not?
-logger' :: (MonadReader e m, HasLogger e m) => String -> m ()
-logger' msg = asks logger >>= \f -> f msg
+loggerD :: MonadDep '[HasLogger] d e m => String -> m ()
+loggerD msg = asks logger >>= \f -> liftD $ f msg
 
-type HasRepository :: Type -> (Type -> Type) -> Constraint
-class HasRepository r m | r -> m where
-  repository :: r -> Int -> m ()
+type HasRepository :: (Type -> Type) -> Type -> Constraint
+class HasRepository d r | r -> d where
+  repository :: r -> Int -> d ()
 
 -- Some possible implementations.
 --
 -- An implementation of the controller, done programming against interfaces
 -- (well, against typeclasses).
 -- Polymorphic on the monad.
-mkController :: (MonadReader e m, HasLogger e m, HasRepository e m) => Int -> m String
+mkController :: MonadDep [HasLogger, HasRepository] d e m => Int -> m String
 mkController x = do
   e <- ask
-  logger e "I'm going to insert in the db!"
-  repository e x
+  liftD $ logger e "I'm going to insert in the db!"
+  liftD $ repository e x
   return "view"
 
 -- A "real" logger implementation that interacts with the external world.
@@ -66,10 +67,10 @@ mkStdoutLogger :: MonadIO m => String -> m ()
 mkStdoutLogger msg = liftIO (putStrLn msg)
 
 -- A "real" repository implementation
-mkStdoutRepository :: (MonadReader e m, HasLogger e m, MonadIO m) => Int -> m ()
+mkStdoutRepository :: (MonadDep '[HasLogger] d e m, MonadIO m) => Int -> m ()
 mkStdoutRepository entity = do
   e <- ask
-  logger e "I'm going to write the entity!"
+  liftD $ logger e "I'm going to write the entity!"
   liftIO $ print entity
 
 -- The traces we accumulate from the fakes during tests
@@ -80,10 +81,10 @@ mkFakeLogger :: Monoid x => MonadWriter ([String],x) m => String -> m ()
 mkFakeLogger msg = tell ([msg], mempty)
 
 -- Ditto.
-mkFakeRepository :: (MonadReader e m, HasLogger e m, MonadWriter TestTrace m) => Int -> m ()
+mkFakeRepository :: (MonadDep '[HasLogger] d e m, MonadWriter TestTrace m) => Int -> m ()
 mkFakeRepository entity = do
   e <- ask
-  logger e "I'm going to write the entity!"
+  liftD $ logger e "I'm going to write the entity!"
   tell ([], [entity])
 
 --
@@ -95,10 +96,10 @@ data EnvIO = EnvIO
     _repositoryIO :: Int -> IO ()
   }
 
-instance HasLogger EnvIO IO where
+instance HasLogger IO EnvIO where
   logger = _loggerIO
 
-instance HasRepository EnvIO IO where
+instance HasRepository IO EnvIO where
   repository = _repositoryIO
 
 -- In the monomorphic environment, the controller function lives "separate",
@@ -112,7 +113,7 @@ instance HasRepository EnvIO IO where
 -- In a sufficiently complex app, the diverse functions will form a DAG of
 -- dependencies between each other. So it would be nice if the functions were
 -- treated uniformly, all having access to (views of) the environment record.
-mkControllerIO :: (HasLogger e IO, HasRepository e IO) => Int -> ReaderT e IO String
+mkControllerIO :: (HasLogger IO e, HasRepository IO e) => Int -> ReaderT e IO String
 mkControllerIO x = do
   e <- ask
   liftIO $ logger e "I'm going to insert in the db!"
@@ -134,10 +135,10 @@ $(Rank2.TH.deriveFunctor ''Env)
 
 -- If our environment is parmeterized by the monad m, then logging is done in
 -- m.
-instance HasLogger (Env m) m where
+instance HasLogger m (Env m) where
   logger = _logger
 
-instance HasRepository (Env m) m where
+instance HasRepository m (Env m) where
   repository = _repository
 
 -- This bigger environment is for demonstrating how to "nest" environments.
@@ -272,28 +273,28 @@ data CachingTestEnv m = CachingTestEnv {
     _logger2 :: String -> m ()
     }
 
-instance HasLogger (CachingTestEnv m) m where
+instance HasLogger m (CachingTestEnv m) where
   logger = _logger2
 
-type HasExpensiveComputation :: Type -> (Type -> Type) -> Constraint
-class HasExpensiveComputation r m | r -> m where
-  expensiveComputation :: r -> Int -> Bool -> m String
-instance HasExpensiveComputation (CachingTestEnv m) m where
+type HasExpensiveComputation :: (Type -> Type) -> Type -> Constraint
+class HasExpensiveComputation d r | r -> d where
+  expensiveComputation :: r -> Int -> Bool -> d String
+instance HasExpensiveComputation m (CachingTestEnv m) where
   expensiveComputation = _expensiveComputation 
 
-mkFakeExpensiveComputation :: (MonadReader e m, HasLogger e m) => Int -> Bool -> m String
+mkFakeExpensiveComputation :: MonadDep '[HasLogger] d e m => Int -> Bool -> m String
 mkFakeExpensiveComputation i b = do
     e <- ask
-    logger e "Doing expensive computation"
+    liftD $ logger e "Doing expensive computation"
     return $ (show i ++ show b)
 
-cacheTestLogic :: (MonadReader e m, HasLogger e m, HasExpensiveComputation e m) => m ()
+cacheTestLogic :: MonadDep [HasLogger, HasExpensiveComputation] d e m => m ()
 cacheTestLogic = do
     e <- ask
-    expensiveComputation e 0 False >>= logger e
-    expensiveComputation e 1 True >>= logger e
-    expensiveComputation e 0 False >>= logger e
-    expensiveComputation e 1 True >>= logger e
+    liftD $ expensiveComputation e 0 False >>= logger e
+    liftD $ expensiveComputation e 1 True >>= logger e
+    liftD $ expensiveComputation e 0 False >>= logger e
+    liftD $ expensiveComputation e 1 True >>= logger e
 
 type ExpensiveComputationMonad = RWS () ([String],()) [(AnyEq,String)]
 

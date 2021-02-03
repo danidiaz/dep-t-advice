@@ -330,9 +330,9 @@ data Pair a b = Pair !a !b
 -- 'Ensure' is a helper for lifting typeclass definitions of the form:
 --
 -- >>> :{
---  type HasLogger :: Type -> (Type -> Type) -> Constraint
---  class HasLogger em m | em -> m where
---    logger :: em -> String -> m ()
+--  type HasLogger :: (Type -> Type) -> Type -> Constraint
+--  class HasLogger d ed | ed -> d where
+--    logger :: ed -> String -> d ()
 -- :}
 --
 -- To work as a constraints on the @e@ and @m@ parameters of an 'Advice', like this:
@@ -354,9 +354,9 @@ data Pair a b = Pair !a !b
 -- Furthermore, 'Advices' require @HasX@-style constraints to be placed on the
 -- @DepT@ transformer, not directly on the base monad @m@. @Ensure@ takes care
 -- of that as well.
-type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
+type Ensure :: ((Type -> Type) -> Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 
-type Ensure c e m = c (e (DepT e m)) (DepT e m)
+type Ensure c e m = c (DepT e m) (e (DepT e m)) 
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
