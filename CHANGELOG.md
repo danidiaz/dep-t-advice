@@ -1,5 +1,13 @@
 # Revision history for dep-t-advice
 
+## 0.4.0.0 
+
+* Added 'deceive' function.
+
+* BREAKING CHANGE. The form of the 'HasX' constraints expected by 'Ensure' has
+  changed. Now they expect the effect monad as their first parameter. This is
+  in order to help with deriving.
+
 ## 0.3.0.0 
 
 * BREAKING CHANGE. Removed the dependency on "constraints" to reduce the

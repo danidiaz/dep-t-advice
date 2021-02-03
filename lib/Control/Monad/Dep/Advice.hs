@@ -93,6 +93,9 @@ module Control.Monad.Dep.Advice
     runFinalDepT,
     runFromEnv,
 
+    -- * Making functions see a different environment
+    deceive,
+
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -101,11 +104,12 @@ module Control.Monad.Dep.Advice
     NP (..),
     I (..),
     cfoldMap_NP,
-    Dict (..)
+    Dict (..),
   )
 where
 
 import Control.Monad.Dep
+import Control.Monad.Trans.Reader
 import Data.Kind
 import Data.SOP
 import Data.SOP.Dict
@@ -163,8 +167,7 @@ data Advice ca e m r where
       NP I as ->
       DepT e m (u, NP I as)
     ) ->
-    ( 
-      u ->
+    ( u ->
       DepT e m r ->
       DepT e m r
     ) ->
@@ -186,8 +189,7 @@ instance Monad m => Semigroup (Advice ca e m r) where
             NP I as ->
             DepT e m (outer, NP I as)
           ) ->
-          ( 
-            outer ->
+          ( outer ->
             DepT e m r ->
             DepT e m r
           ) ->
@@ -197,8 +199,7 @@ instance Monad m => Semigroup (Advice ca e m r) where
             NP I as ->
             DepT e m (inner, NP I as)
           ) ->
-          ( 
-            inner ->
+          ( inner ->
             DepT e m r ->
             DepT e m r
           ) ->
@@ -265,8 +266,7 @@ makeAdvice ::
     DepT e m (u, NP I as)
   ) ->
   -- | The function that tweaks the execution.
-  ( 
-    u ->
+  ( u ->
     DepT e m r ->
     DepT e m r
   ) ->
@@ -284,7 +284,7 @@ makeAdvice = Advice (Proxy @u)
 -- :}
 makeArgsAdvice ::
   forall ca e m r.
-  Monad m => 
+  Monad m =>
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
@@ -313,8 +313,7 @@ makeExecutionAdvice ::
   forall ca e m r.
   Applicative m =>
   -- | The function that tweaks the execution.
-  ( 
-    DepT e m r ->
+  ( DepT e m r ->
     DepT e m r
   ) ->
   Advice ca e m r
@@ -333,7 +332,7 @@ data Pair a b = Pair !a !b
 --
 -- To work as a constraints on the @e@ and @m@ parameters of an 'Advice', like this:
 --
--- >>> :{ 
+-- >>> :{
 --  requiresLogger :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
 --  requiresLogger = mempty
 --  :}
@@ -351,7 +350,8 @@ data Pair a b = Pair !a !b
 -- @DepT@ transformer, not directly on the base monad @m@. @Ensure@ takes care
 -- of that as well.
 type Ensure :: (Type -> (Type -> Type) -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
-type Ensure c e m = c (e (DepT e m)) (DepT e m) 
+
+type Ensure c e m = c (e (DepT e m)) (DepT e m)
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
@@ -498,14 +498,12 @@ runFromEnv = _runFromEnv
 --    or with a type application to 'restrictArgs':
 --
 -- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
---
---
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
   forall more less e m r.
   -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
-  (forall x. Dict more x -> Dict less x) -> 
+  (forall x. Dict more x -> Dict less x) ->
   -- | Advice with less restrictive constraint on the args.
   Advice less e m r ->
   -- | Advice with more restrictive constraint on the args.
@@ -528,8 +526,7 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           NP I as ->
           DepT e m (u, NP I as)
         ) ->
-        ( 
-          u ->
+        ( u ->
           DepT e m r ->
           DepT e m r
         ) ->
@@ -545,6 +542,30 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
           )
           tweakExecution'
    in captureExistential evidence proxy tweakArgs tweakExecution
+
+--
+class Multicurryable as e m r curried => Deceivable as newtyped e m r curried where
+  type Deceived as newtyped e m r curried :: Type
+  _deceive :: (e (DepT e m) -> newtyped) -> Deceived as newtyped e m r curried -> curried
+
+instance Monad m => Deceivable '[] newtyped e m r (DepT e m r) where
+  type Deceived '[] newtyped e m r (DepT e m r) = ReaderT newtyped m r
+  _deceive f action = DepT (withReaderT f action)
+
+instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e m r (a -> curried) where
+  type Deceived (a ': as) newtyped e m r (a -> curried) = a -> Deceived as newtyped e m r curried
+  _deceive f g a = deceive @as @newtyped @e @m @r f (g a)
+
+deceive ::
+  forall as newtyped e m r curried.
+  Deceivable as newtyped e m r curried =>
+  -- | The newtype constructor that masks the \"true\" environment.
+  (e (DepT e m) -> newtyped) ->
+  -- | A function to be deceived. It should be polymorphic over 'Control.Monad.Dep.MonadDep'.
+  Deceived as newtyped e m r curried ->
+  -- | The deceived function, that has effects in 'DepT'.
+  curried
+deceive = _deceive
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
