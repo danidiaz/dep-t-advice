@@ -83,7 +83,7 @@ returnMempty =
 --
 -- Because it doesn't touch the return value of the advised function, this
 -- 'Advice' is polymorphic on @cr@.
-printArgs :: forall e m r. MonadIO m => Handle -> String -> Advice Show e m r
+printArgs :: forall e_ m r. MonadIO m => Handle -> String -> Advice Show e_ m r
 printArgs h prefix =
   makeArgsAdvice
     ( \args -> do
