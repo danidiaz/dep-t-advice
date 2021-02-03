@@ -35,18 +35,18 @@ But how will you go about it?
 
 Imagine that you want to make this function print its argument to stdout:
 
-    foo :: Int -> DepT e IO () 
+    foo :: Int -> DepT e_ IO () 
 
 Easy enough:
 
-    foo' :: Int -> DepT e IO ()
+    foo' :: Int -> DepT e_ IO ()
     foo' arg1 = do
         liftIO $ putStrLn (show arg1)
         foo arg1
 
 You can even write your own general "printArgs" combinator:
 
-    printArgs :: Show a => (a -> DepT e IO ()) -> (a -> DepT e IO ())
+    printArgs :: Show a => (a -> DepT e_ IO ()) -> (a -> DepT e_ IO ())
     printArgs f arg1 = do
         liftIO $ putStrLn (show arg1)
         f arg1
@@ -82,7 +82,7 @@ Advices can't change the type of a function, but they might:
 
 Here's how a `printArgs` advice might be defined:
 
-    printArgs :: forall e m r. MonadIO m => Handle -> String -> Advice Show e m r
+    printArgs :: forall e_ m r. MonadIO m => Handle -> String -> Advice Show e_ m r
     printArgs h prefix =
       makeArgsAdvice
         ( \args -> do

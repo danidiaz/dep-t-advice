@@ -143,11 +143,11 @@ import Data.SOP.NP
 -- >>> import Data.IORef
 
 -- | A generic transformation of 'DepT'-effectful functions with environment
--- @e@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
+-- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
 -- provided the functions satisfy certain constraint @ca@ of kind @Type ->
 -- Constraint@ on all of their arguments.
 --
--- Note that the type constructor for the environment @e@ is given unapplied.
+-- Note that the type constructor for the environment @e_@ is given unapplied.
 -- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
 -- IO ()@ doesn't. See also 'Ensure'.
 --
@@ -163,20 +163,20 @@ type Advice ::
   (Type -> Type) ->
   Type ->
   Type
-data Advice ca e m r where
+data Advice ca e_ m r where
   Advice ::
-    forall u ca e m r.
+    forall u ca e_ m r.
     Proxy u ->
     ( forall as.
       All ca as =>
       NP I as ->
-      DepT e m (u, NP I as)
+      DepT e_ m (u, NP I as)
     ) ->
     ( u ->
-      DepT e m r ->
-      DepT e m r
+      DepT e_ m r ->
+      DepT e_ m r
     ) ->
-    Advice ca e m r
+    Advice ca e_ m r
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
@@ -184,31 +184,31 @@ data Advice ca e m r where
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
-instance Monad m => Semigroup (Advice ca e m r) where
+instance Monad m => Semigroup (Advice ca e_ m r) where
   Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
     let captureExistentials ::
-          forall ca e r outer inner.
+          forall ca e_ r outer inner.
           Proxy outer ->
           ( forall as.
             All ca as =>
             NP I as ->
-            DepT e m (outer, NP I as)
+            DepT e_ m (outer, NP I as)
           ) ->
           ( outer ->
-            DepT e m r ->
-            DepT e m r
+            DepT e_ m r ->
+            DepT e_ m r
           ) ->
           Proxy inner ->
           ( forall as.
             All ca as =>
             NP I as ->
-            DepT e m (inner, NP I as)
+            DepT e_ m (inner, NP I as)
           ) ->
           ( inner ->
-            DepT e m r ->
-            DepT e m r
+            DepT e_ m r ->
+            DepT e_ m r
           ) ->
-          Advice ca e m r
+          Advice ca e_ m r
         captureExistentials _ tweakArgsOuter' tweakExecutionOuter' _ tweakArgsInner' tweakExecutionInner' =
           Advice
             (Proxy @(Pair outer inner))
@@ -216,7 +216,7 @@ instance Monad m => Semigroup (Advice ca e m r) where
                     forall as.
                     All ca as =>
                     NP I as ->
-                    DepT e m (Pair outer inner, NP I as)
+                    DepT e_ m (Pair outer inner, NP I as)
                   tweakArgs args =
                     do
                       (uOuter, argsOuter) <- tweakArgsOuter' @as args
@@ -226,17 +226,17 @@ instance Monad m => Semigroup (Advice ca e m r) where
             )
             ( let tweakExecution ::
                     Pair outer inner ->
-                    DepT e m r ->
-                    DepT e m r
+                    DepT e_ m r ->
+                    DepT e_ m r
                   tweakExecution =
                     ( \(Pair uOuter uInner) action ->
                         tweakExecutionOuter' uOuter (tweakExecutionInner' uInner action)
                     )
                in tweakExecution
             )
-     in captureExistentials @ca @e outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+     in captureExistentials @ca @e_ outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
 
-instance Monad m => Monoid (Advice ca e m r) where
+instance Monad m => Monoid (Advice ca e_ m r) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
@@ -255,7 +255,7 @@ instance Monad m => Monoid (Advice ca e m r) where
 --    type @u@ calculated earlier.
 --
 -- >>> :{
---  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
+--  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
 --  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
 -- :}
 --
@@ -263,19 +263,19 @@ instance Monad m => Monoid (Advice ca e m r) where
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
 makeAdvice ::
-  forall u ca e m r.
+  forall u ca e_ m r.
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e m (u, NP I as)
+    DepT e_ m (u, NP I as)
   ) ->
   -- | The function that tweaks the execution.
   ( u ->
-    DepT e m r ->
-    DepT e m r
+    DepT e_ m r ->
+    DepT e_ m r
   ) ->
-  Advice ca e m r
+  Advice ca e_ m r
 makeAdvice = Advice (Proxy @u)
 
 -- |
@@ -284,19 +284,19 @@ makeAdvice = Advice (Proxy @u)
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
+--  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
-  forall ca e m r.
+  forall ca e_ m r.
   Monad m =>
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e m (NP I as)
+    DepT e_ m (NP I as)
   ) ->
-  Advice ca e m r
+  Advice ca e_ m r
 makeArgsAdvice tweakArgs =
   makeAdvice @()
     ( \args -> do
@@ -311,17 +311,17 @@ makeArgsAdvice tweakArgs =
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
+--  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
-  forall ca e m r.
+  forall ca e_ m r.
   Applicative m =>
   -- | The function that tweaks the execution.
-  ( DepT e m r ->
-    DepT e m r
+  ( DepT e_ m r ->
+    DepT e_ m r
   ) ->
-  Advice ca e m r
+  Advice ca e_ m r
 makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
 
 data Pair a b = Pair !a !b
@@ -331,14 +331,14 @@ data Pair a b = Pair !a !b
 --
 -- >>> :{
 --  type HasLogger :: (Type -> Type) -> Type -> Constraint
---  class HasLogger d ed | ed -> d where
---    logger :: ed -> String -> d ()
+--  class HasLogger d e | e -> d where
+--    logger :: e -> String -> d ()
 -- :}
 --
--- To work as a constraints on the @e@ and @m@ parameters of an 'Advice', like this:
+-- To work as a constraints on the @e_@ and @m@ parameters of an 'Advice', like this:
 --
 -- >>> :{
---  requiresLogger :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
+--  requiresLogger :: forall e_ m r. (Ensure HasLogger e_ m, Monad m) => Advice Show e_ m r
 --  requiresLogger = mempty
 --  :}
 --
@@ -348,7 +348,7 @@ data Pair a b = Pair !a !b
 -- (like those in <http://hackage.haskell.org/package/rio RIO>) whose type
 -- isn't parameterized by any monad.
 --
--- But the @e@ type parameter of 'Advice' has kind @(Type -> Type) -> Type@.
+-- But the @e_@ type parameter of 'Advice' has kind @(Type -> Type) -> Type@.
 -- That is: @NilEnv@ alone.
 --
 -- Furthermore, 'Advices' require @HasX@-style constraints to be placed on the
@@ -356,7 +356,7 @@ data Pair a b = Pair !a !b
 -- of that as well.
 type Ensure :: ((Type -> Type) -> Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 
-type Ensure c e m = c (DepT e m) (e (DepT e m)) 
+type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m)) 
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
@@ -377,19 +377,19 @@ type Ensure c e m = c (DepT e m) (e (DepT e m))
 --  advisedBar2 = advise @Top returnMempty bar
 -- :}
 advise ::
-  forall ca e m r as advisee.
-  (Multicurryable as e m r advisee, All ca as, Monad m) =>
+  forall ca e_ m r as advisee.
+  (Multicurryable as e_ m r advisee, All ca as, Monad m) =>
   -- | The advice to apply.
-  Advice ca e m r ->
+  Advice ca e_ m r ->
   -- | A function to be adviced.
   advisee ->
   advisee
 advise (Advice _ tweakArgs tweakExecution) advisee = do
-  let uncurried = multiuncurry @as @e @m @r advisee
+  let uncurried = multiuncurry @as @e_ @m @r advisee
       uncurried' args = do
         (u, args') <- tweakArgs args
         tweakExecution u (uncurried args')
-   in multicurry @as @e @m @r uncurried'
+   in multicurry @as @e_ @m @r uncurried'
 
 type Multicurryable ::
   [Type] ->
@@ -398,25 +398,25 @@ type Multicurryable ::
   Type ->
   Type ->
   Constraint
-class Multicurryable as e m r curried | curried -> as e m r where
-  type DownToBaseMonad as e m r curried :: Type
-  multiuncurry :: curried -> NP I as -> DepT e m r
-  multicurry :: (NP I as -> DepT e m r) -> curried
-  _runFromEnv :: m (e (DepT e m)) -> (e (DepT e m) -> curried) -> DownToBaseMonad as e m r curried
+class Multicurryable as e_ m r curried | curried -> as e_ m r where
+  type DownToBaseMonad as e_ m r curried :: Type
+  multiuncurry :: curried -> NP I as -> DepT e_ m r
+  multicurry :: (NP I as -> DepT e_ m r) -> curried
+  _runFromEnv :: m (e_ (DepT e_ m)) -> (e_ (DepT e_ m) -> curried) -> DownToBaseMonad as e_ m r curried
 
-instance Monad m => Multicurryable '[] e m r (DepT e m r) where
-  type DownToBaseMonad '[] e m r (DepT e m r) = m r
+instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
+  type DownToBaseMonad '[] e_ m r (DepT e_ m r) = m r
   multiuncurry action Nil = action
   multicurry f = f Nil
   _runFromEnv producer extractor = do
     e <- producer
     runDepT (extractor e) e
 
-instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a -> curried) where
-  type DownToBaseMonad (a ': as) e m r (a -> curried) = a -> DownToBaseMonad as e m r curried
-  multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
-  multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
-  _runFromEnv producer extractor a = _runFromEnv @as @e @m @r @curried producer (\f -> extractor f a)
+instance Multicurryable as e_ m r curried => Multicurryable (a ': as) e_ m r (a -> curried) where
+  type DownToBaseMonad (a ': as) e_ m r (a -> curried) = a -> DownToBaseMonad as e_ m r curried
+  multiuncurry f (I a :* as) = multiuncurry @as @e_ @m @r @curried (f a) as
+  multicurry f a = multicurry @as @e_ @m @r @curried (f . (:*) (I a))
+  _runFromEnv producer extractor a = _runFromEnv @as @e_ @m @r @curried producer (\f -> extractor f a)
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment, run
 -- the 'DepT' transformer at the tip of a curried function.
@@ -428,14 +428,14 @@ instance Multicurryable as e m r curried => Multicurryable (a ': as) e m r (a ->
 --
 --  >>> runFinalDepT (pure NilEnv) foo 1 2 3 :: IO ()
 runFinalDepT ::
-  forall as e m r curried.
-  Multicurryable as e m r curried =>
+  forall as e_ m r curried.
+  Multicurryable as e_ m r curried =>
   -- | action that gets hold of the environment
-  m (e (DepT e m)) ->
+  m (e_ (DepT e_ m)) ->
   -- | function to invoke with effects in 'DepT'
   curried ->
   -- | a new function with effects in the base monad
-  DownToBaseMonad as e m r curried
+  DownToBaseMonad as e_ m r curried
 runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
@@ -466,14 +466,14 @@ runFinalDepT producer extractor = _runFromEnv producer (const extractor)
 -- Sum {getSum = 7}
 -- Sum {getSum = 0}
 runFromEnv ::
-  forall as e m r curried.
-  Multicurryable as e m r curried =>
+  forall as e_ m r curried.
+  Multicurryable as e_ m r curried =>
   -- | action that gets hold of the environment
-  m (e (DepT e m)) ->
+  m (e_ (DepT e_ m)) ->
   -- | gets a function from the environment with effects in 'DepT'
-  (e (DepT e m) -> curried) ->
+  (e_ (DepT e_ m) -> curried) ->
   -- | a new function with effects in the base monad
-  DownToBaseMonad as e m r curried
+  DownToBaseMonad as e_ m r curried
 runFromEnv = _runFromEnv
 
 -- $restrict
@@ -496,7 +496,7 @@ runFromEnv = _runFromEnv
 --    enough type information to the GADT, be it as an explicit signature:
 --
 -- >>> :{
---  stricterPrintArgs :: forall e m r. MonadIO m => Advice (Show `And` Eq `And` Ord) NilEnv m r
+--  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
 --  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --
@@ -506,13 +506,13 @@ runFromEnv = _runFromEnv
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
-  forall more less e m r.
+  forall more less e_ m r.
   -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
   (forall x. Dict more x -> Dict less x) ->
   -- | Advice with less restrictive constraint on the args.
-  Advice less e m r ->
+  Advice less e_ m r ->
   -- | Advice with more restrictive constraint on the args.
-  Advice more e m r
+  Advice more e_ m r
 -- about the order of the type parameters... which is more useful?
 -- A possible principle to follow:
 -- We are likely to know the "less" constraint, because advices are likely to
@@ -523,23 +523,23 @@ restrictArgs ::
 -- type signature.  This seems to favor putting "more" first.
 restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
-        forall more less e m r u.
+        forall more less e_ m r u.
         (forall x. Dict more x -> Dict less x) ->
         Proxy u ->
         ( forall as.
           All less as =>
           NP I as ->
-          DepT e m (u, NP I as)
+          DepT e_ m (u, NP I as)
         ) ->
         ( u ->
-          DepT e m r ->
-          DepT e m r
+          DepT e_ m r ->
+          DepT e_ m r
         ) ->
-        Advice more e m r
+        Advice more e_ m r
       captureExistential evidence' _ tweakArgs' tweakExecution' =
         Advice
           (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e m (u, NP I as)
+          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e_ m (u, NP I as)
                 tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
                   f -> case f (Dict @(All more) @as) of
                     Dict -> \args -> tweakArgs' @as args
@@ -549,17 +549,17 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
    in captureExistential evidence proxy tweakArgs tweakExecution
 
 --
-class Multicurryable as e m r curried => Deceivable as newtyped e m r curried where
-  type Deceived as newtyped e m r curried :: Type
-  _deceive :: (e (DepT e m) -> newtyped) -> Deceived as newtyped e m r curried -> curried
+class Multicurryable as e_ m r curried => Deceivable as newtyped e_ m r curried where
+  type Deceived as newtyped e_ m r curried :: Type
+  _deceive :: (e_ (DepT e_ m) -> newtyped) -> Deceived as newtyped e_ m r curried -> curried
 
-instance Monad m => Deceivable '[] newtyped e m r (DepT e m r) where
-  type Deceived '[] newtyped e m r (DepT e m r) = ReaderT newtyped m r
+instance Monad m => Deceivable '[] newtyped e_ m r (DepT e_ m r) where
+  type Deceived '[] newtyped e_ m r (DepT e_ m r) = ReaderT newtyped m r
   _deceive f action = DepT (withReaderT f action)
 
-instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e m r (a -> curried) where
-  type Deceived (a ': as) newtyped e m r (a -> curried) = a -> Deceived as newtyped e m r curried
-  _deceive f g a = deceive @as @newtyped @e @m @r f (g a)
+instance Deceivable as newtyped e_ m r curried => Deceivable (a ': as) newtyped e_ m r (a -> curried) where
+  type Deceived (a ': as) newtyped e_ m r (a -> curried) = a -> Deceived as newtyped e_ m r curried
+  _deceive f g a = deceive @as @newtyped @e_ @m @r f (g a)
 
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
@@ -570,11 +570,11 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 --
 -- >>> :{
 --  type HasLogger :: (Type -> Type) -> Type -> Constraint
---  class HasLogger d ed | ed -> d where
---    logger :: ed -> String -> d ()
+--  class HasLogger d e | e -> d where
+--    logger :: e -> String -> d ()
 --  type HasIntermediate :: (Type -> Type) -> Type -> Constraint
---  class HasIntermediate d ed | ed -> d where
---    intermediate :: ed -> String -> d ()
+--  class HasIntermediate d e | e -> d where
+--    intermediate :: e -> String -> d ()
 --  type Env :: (Type -> Type) -> Type
 --  data Env m = Env
 --    { _logger1 :: String -> m (),
@@ -628,12 +628,12 @@ instance Deceivable as newtyped e m r curried => Deceivable (a ': as) newtyped e
 -- already \"collapsed\" into 'DepT' won't work. Therefore, 'deceive' must be applied before any 'Advice'.
 --
 deceive ::
-  forall as newtyped e m r curried.
-  Deceivable as newtyped e m r curried =>
+  forall as newtyped e_ m r curried.
+  Deceivable as newtyped e_ m r curried =>
   -- | The newtype constructor that masks the \"true\" environment.
-  (e (DepT e m) -> newtyped) ->
+  (e_ (DepT e_ m) -> newtyped) ->
   -- | A function to be deceived. It must be polymorphic over 'Control.Monad.Dep.MonadDep'.
-  Deceived as newtyped e m r curried ->
+  Deceived as newtyped e_ m r curried ->
   -- | The deceived function, that has effects in 'DepT'.
   curried
 deceive = _deceive
