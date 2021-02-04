@@ -549,17 +549,25 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
    in captureExistential evidence proxy tweakArgs tweakExecution
 
 --
-class Multicurryable as e_ m r curried => Deceivable as newtyped e_ m r curried where
-  type Deceived as newtyped e_ m r curried :: Type
-  _deceive :: (e_ (DepT e_ m) -> newtyped) -> Deceived as newtyped e_ m r curried -> curried
+type Gullible ::
+  [Type] ->
+  Type ->
+  ((Type -> Type) -> Type) ->
+  (Type -> Type) ->
+  Type ->
+  Type ->
+  Constraint
+class Multicurryable as e_ m r curried => Gullible as e e_ m r curried where
+  type NewtypedEnv as e e_ m r curried :: Type
+  _deceive :: (e_ (DepT e_ m) -> e) -> NewtypedEnv as e e_ m r curried -> curried
 
-instance Monad m => Deceivable '[] newtyped e_ m r (DepT e_ m r) where
-  type Deceived '[] newtyped e_ m r (DepT e_ m r) = ReaderT newtyped m r
+instance Monad m => Gullible '[] e e_ m r (DepT e_ m r) where
+  type NewtypedEnv '[] e e_ m r (DepT e_ m r) = ReaderT e m r
   _deceive f action = DepT (withReaderT f action)
 
-instance Deceivable as newtyped e_ m r curried => Deceivable (a ': as) newtyped e_ m r (a -> curried) where
-  type Deceived (a ': as) newtyped e_ m r (a -> curried) = a -> Deceived as newtyped e_ m r curried
-  _deceive f g a = deceive @as @newtyped @e_ @m @r f (g a)
+instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curried) where
+  type NewtypedEnv (a ': as) e e_ m r (a -> curried) = a -> NewtypedEnv as e e_ m r curried
+  _deceive f g a = deceive @as @e @e_ @m @r f (g a)
 
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
@@ -628,12 +636,12 @@ instance Deceivable as newtyped e_ m r curried => Deceivable (a ': as) newtyped 
 -- already \"collapsed\" into 'DepT' won't work. Therefore, 'deceive' must be applied before any 'Advice'.
 --
 deceive ::
-  forall as newtyped e_ m r curried.
-  Deceivable as newtyped e_ m r curried =>
+  forall as e e_ m r curried.
+  Gullible as e e_ m r curried =>
   -- | The newtype constructor that masks the \"true\" environment.
-  (e_ (DepT e_ m) -> newtyped) ->
+  (e_ (DepT e_ m) -> e) ->
   -- | A function to be deceived. It must be polymorphic over 'Control.Monad.Dep.MonadDep'.
-  Deceived as newtyped e_ m r curried ->
+  NewtypedEnv as e e_ m r curried ->
   -- | The deceived function, that has effects in 'DepT'.
   curried
 deceive = _deceive

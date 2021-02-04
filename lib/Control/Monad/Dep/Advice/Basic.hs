@@ -65,8 +65,6 @@ import Control.Concurrent
 
 -- | Makes functions discard their result and always return 'mempty'.
 --
--- Because it doesn't touch the arguments or require some effect from the
--- environment, this 'Advice' is polymorphic on @ca@ and @cem@.
 returnMempty :: forall ca e_ m r. (Monad m, Monoid r) => Advice ca e_ m r
 returnMempty =
   makeExecutionAdvice
@@ -78,11 +76,6 @@ returnMempty =
 -- | Given a 'Handle' and a prefix string, makes functions print their
 -- arguments to the 'Handle'.
 --
--- This advice uses 'MonadConstraint' to lift the 'MonadIO' constraint that
--- applies only to the monad.
---
--- Because it doesn't touch the return value of the advised function, this
--- 'Advice' is polymorphic on @cr@.
 printArgs :: forall e_ m r. MonadIO m => Handle -> String -> Advice Show e_ m r
 printArgs h prefix =
   makeArgsAdvice
@@ -99,7 +92,7 @@ printArgs h prefix =
 -- Allows tweaking the environment that will be seen by the function and all of
 -- its sub-calls into dependencies. 
 --
--- Note that perhaps this is __not__ what you want; often it's better to tweak
+-- Perhaps this is __not__ what you want; often, it's better to tweak
 -- the environment for the current function only. For those cases,
 -- 'Control.Monad.Dep.Advice.deceive' might be a better fit. 
 --
@@ -155,12 +148,11 @@ instance Eq AnyEq where
       Just Refl -> any1 == any2
 
 -- | 
--- Given the means for looking up and storing values in the underlying monad
--- @m@, makes functions (inefficiently) cache their results.
+-- Given the means for looking up and storing @r@ values in the underlying
+-- monad @m@, makes functions (inefficiently) cache their results.
 --
--- Notice the equality constraints on the 'Advice'. This means that the monad
--- @m@ and the result type @r@ are known and fixed before building the advice.
--- Once built, the 'Advice' won't be polymorphic over them.
+-- The monad @m@ and the result type @r@ must be known before building the
+-- advice. So, once built, this 'Advice' won't be polymorphic over them.
 --
 -- The implementation of this function makes use of the existential type
 -- parameter @u@ of 'makeAdvice', because the phase that processes the function
@@ -192,7 +184,7 @@ doCachingBadly cacheLookup cachePut =
 -- A better implementation of this advice would likely use the \"async\"
 -- package instead of bare `forkIO`. 
 --
--- And the @MustBe IO@ constraint could be relaxed to @MonadUnliftIO@.
+-- The @IO@ monad could be generalized to @MonadUnliftIO@.
 doAsyncBadly :: forall ca e_ . Advice ca e_ IO ()
 doAsyncBadly = makeExecutionAdvice (\action -> do
         e <- ask 
