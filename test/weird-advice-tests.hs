@@ -86,7 +86,7 @@ data EnvHKD h m = EnvHKD
     logger_2 :: h (Logger m),
     repository :: h (Repository m),
     controller :: h (Controller m)
-  }
+  } deriving Generic
 
 envHKD :: EnvHKD I (DepT Env (Writer ()))
 envHKD =
@@ -96,13 +96,33 @@ envHKD =
         I $ Logger \_ -> pure ()
       repository =
         I $
-        deceiveRecord Wraps $
+          adviseRecord @Top @Top mempty $ 
+          deceiveRecord Wraps $
           Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
         I $
-        deceiveRecord Wraps $
+          adviseRecord @Top @Top mempty $ 
+          deceiveRecord Wraps $
           Controller \_ -> pure "view"
-   in EnvHKD {logger, logger_2, repository, controller}
+   in adviseRecord @Top @Top mempty $ EnvHKD {logger, logger_2, repository, controller}
+
+
+envHKD' :: EnvHKD I (DepT Env (Writer ()))
+envHKD' =
+  let logger =
+        I $ Logger \_ -> pure ()
+      logger_2 =
+        I $ Logger \_ -> pure ()
+      repository =
+        I $
+          Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+      controller =
+        I $
+          Controller \_ -> pure "view"
+   in adviseRecord @Top @Top mempty $ 
+      deceiveRecord Wraps $
+      EnvHKD {logger, logger_2, repository, controller}
+
 
 --
 --

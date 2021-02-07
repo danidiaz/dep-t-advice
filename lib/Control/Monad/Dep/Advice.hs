@@ -682,6 +682,7 @@ type DiscriminateGullibleComponent :: Type -> RecordComponent
 type family DiscriminateGullibleComponent c where
   DiscriminateGullibleComponent (a -> b) = Terminal
   DiscriminateGullibleComponent (ReaderT e m x) = Terminal
+  DiscriminateGullibleComponent (I _) = IWrapped
   DiscriminateGullibleComponent _ = Recurse
 
 type GullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
@@ -695,10 +696,18 @@ instance
   _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
 
 instance
+  GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived
+  =>
+  GullibleComponent IWrapped e e_ m (I gullible) (I deceived)
+  where
+  _deceiveComponent f (I gullible) = I (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible)
+
+instance
   GullibleRecord e e_ m gullible =>
   GullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m))
   where
   _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
+
 
 instance
   GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
