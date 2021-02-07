@@ -739,7 +739,6 @@ type RecursivelyAdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Typ
 class RecursivelyAdvisedProduct ca e_ m advised_ where
     _adviseProduct :: (forall r . Advice ca e_ m r) -> advised_ k -> advised_ k
 
-
 instance (G.Generic (advised (DepT e_ m)),
           G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
           RecursivelyAdvisedProduct ca e_ m advised_
@@ -749,6 +748,14 @@ instance (G.Generic (advised (DepT e_ m)),
         let G.M1 (G.M1 unadvised_) = G.from unadvised
             advised_ = _adviseProduct @_ @ca @e_ @m advice unadvised_ 
          in G.to (G.M1 (G.M1 advised_))
+
+instance (
+            RecursivelyAdvisedProduct ca e_ m advised_left,
+            RecursivelyAdvisedProduct ca e_ m advised_right
+        ) 
+        => RecursivelyAdvisedProduct ca e_ m (advised_left G.:*: advised_right) where
+    _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m f unadvised_right
+
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
