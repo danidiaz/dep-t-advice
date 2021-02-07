@@ -582,13 +582,16 @@ class RecursivelyGullibleComponent e e_ m gullible_ deceived_ | e e_ m deceived_
     _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
 instance (G.Generic (gullible (ReaderT e m)),
-          G.Generic (deceived (DepT e_ m)),
+          G.Generic (gullible (DepT e_ m)),
           G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_), 
-          G.Rep (deceived (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
+          G.Rep (gullible (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
           RecursivelyGullibleComponent e e_ m gullible_ deceived_
           ) 
           => RecursivelyGullible e e_ m gullible where
-    _deceiveRec f gullible = undefined
+    _deceiveRec f gullible = 
+        let G.M1 (G.M1 gullible_) = G.from gullible
+            deceived_ = _deceiveComponentRec @_ @e @e_ @m f gullible_ 
+         in G.to (G.M1 (G.M1 deceived_))
 
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
