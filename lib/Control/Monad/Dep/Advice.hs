@@ -739,18 +739,20 @@ class AdvisedRecord ca e_ m cr advised where
 
 type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
 class AdvisedProduct ca e_ m cr advised_ where
-  _adviseProduct :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
+    -- G.Rep (advised (DepT e_ m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
     G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+    Typeable advised,
     AdvisedProduct ca e_ m cr advised_
   ) =>
   AdvisedRecord ca e_ m cr advised
   where
   _adviseRecord acc f unadvised =
     let G.M1 (G.M1 unadvised_) = G.from unadvised
-        advised_ = _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_
+        advised_ = _adviseProduct @_ @ca @e_ @m @cr (typeRep (Proxy @advised)) acc f unadvised_
      in G.to (G.M1 (G.M1 advised_))
 
 instance
@@ -759,7 +761,7 @@ instance
   ) =>
   AdvisedProduct ca e_ m cr (advised_left G.:*: advised_right)
   where
-  _adviseProduct acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_right
+  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m @cr tr acc f unadvised_right
 
 type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
@@ -777,7 +779,9 @@ instance
    ) =>
   AdvisedProduct ca e_ m cr (G.S1 ('G.MetaSel ('Just fieldName) su ss ds) (G.Rec0 advised))
   where
-  _adviseProduct acc f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised))
+  _adviseProduct tr acc f (G.M1 (G.K1 advised)) = 
+     let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
+     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc' f advised))
 
 instance
   AdvisedRecord ca e_ m cr advisable =>
@@ -793,7 +797,7 @@ instance
 
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
-    (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> 
+    (forall r f . (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) -> 
     -- | The record to advise
     advised (DepT e_ m) -> 
     -- | The advised record
