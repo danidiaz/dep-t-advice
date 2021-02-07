@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE ImportQualifiedPost #-}
 
 -- |
 --    This package provides the 'Advice' datatype, along for functions for creating,
@@ -114,6 +115,7 @@ import Data.Kind
 import Data.SOP
 import Data.SOP.Dict
 import Data.SOP.NP
+import GHC.Generics qualified as G
 
 -- $setup
 --
@@ -568,6 +570,20 @@ instance Monad m => Gullible '[] e e_ m r (DepT e_ m r) where
 instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curried) where
   type NewtypedEnv (a ': as) e e_ m r (a -> curried) = a -> NewtypedEnv as e e_ m r curried
   _deceive f g a = deceive @as @e @e_ @m @r f (g a)
+
+type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
+class RecursivelyGullible e e_ m gullible deceived | deceived e -> gullible where
+    _deceiveRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+
+instance (G.Generic gullible,
+          G.Generic deceived,
+          G.Rep gullible ~ G.D1 x (G.C1 y prod1), 
+          G.Rep deceived ~ G.D1 x (G.C1 y prod2),
+          RecursivelyGullible e e_ m prod1 prod2
+          ) 
+          => RecursivelyGullible e e_ m gullible deceived where
+    _deceiveRec = undefined
+
 
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
