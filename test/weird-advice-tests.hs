@@ -20,6 +20,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main (main) where
 
@@ -41,16 +42,16 @@ import Prelude hiding (log)
 -- https://stackoverflow.com/questions/53498707/cant-derive-generic-for-this-type/53499091#53499091
 -- There are indeed some higher kinded types for which GHC can currently derive Generic1 instances, but the feature is so limited it's hardly worth mentioning. This is mostly an artifact of taking the original implementation of Generic1 intended for * -> * (which already has serious limitations), turning on PolyKinds, and keeping whatever sticks, which is not much.
 type Logger :: (Type -> Type) -> Type
-newtype Logger d = Logger {log :: String -> d ()}
+newtype Logger d = Logger {log :: String -> d ()} deriving Generic
 
 type Repository :: (Type -> Type) -> Type
 data Repository d = Repository
   { select :: String -> d [Int],
     insert :: [Int] -> d ()
-  }
+  } deriving Generic
 
 type Controller :: (Type -> Type) -> Type
-newtype Controller d = Controller {serve :: Int -> d String}
+newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
 
 type Env :: (Type -> Type) -> Type
 data Env m = Env
@@ -71,6 +72,7 @@ env =
         deceiveRecord Wraps $
         Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
+        deceiveRecord Wraps $ 
         Controller \_ -> pure "view"
    in Env {logger, logger_2, repository, controller}
 
@@ -92,9 +94,11 @@ envHKD =
         I $ Logger \_ -> pure ()
       repository =
         I $
+        deceiveRecord Wraps $
           Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
         I $
+        deceiveRecord Wraps $
           Controller \_ -> pure "view"
    in EnvHKD {logger, logger_2, repository, controller}
 
