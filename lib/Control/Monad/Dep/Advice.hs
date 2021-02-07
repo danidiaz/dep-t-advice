@@ -735,11 +735,11 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 --
 type AdvisedRecord :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
 class AdvisedRecord ca e_ m cr advised where
-  _adviseRecord :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
 
 type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
 class AdvisedProduct ca e_ m cr advised_ where
-  _adviseProduct :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
+  _adviseProduct :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
@@ -748,9 +748,9 @@ instance
   ) =>
   AdvisedRecord ca e_ m cr advised
   where
-  _adviseRecord advice unadvised =
+  _adviseRecord acc f unadvised =
     let G.M1 (G.M1 unadvised_) = G.from unadvised
-        advised_ = _adviseProduct @_ @ca @e_ @m @cr advice unadvised_
+        advised_ = _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_
      in G.to (G.M1 (G.M1 advised_))
 
 instance
@@ -759,7 +759,7 @@ instance
   ) =>
   AdvisedProduct ca e_ m cr (advised_left G.:*: advised_right)
   where
-  _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m @cr f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m @cr f unadvised_right
+  _adviseProduct acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m @cr acc f unadvised_right
 
 type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
@@ -769,26 +769,27 @@ type family DiscriminateAdvisedComponent c where
 
 type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
 class AdvisedComponent component_type ca e_ m cr advised where
-  _adviseComponent :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
 
 instance
   (AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
-   KnownSymbol fieldName) =>
-  AdvisedProduct ca e_ m cr (G.S1 ('G.MetaSel ('Just fieldname) su ss ds) (G.Rec0 advised))
+   KnownSymbol fieldName
+   ) =>
+  AdvisedProduct ca e_ m cr (G.S1 ('G.MetaSel ('Just fieldName) su ss ds) (G.Rec0 advised))
   where
-  _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr f advised))
+  _adviseProduct acc f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised))
 
 instance
   AdvisedRecord ca e_ m cr advisable =>
   AdvisedComponent Recurse ca e_ m cr (advisable (DepT e_ m))
   where
-  _adviseComponent f advised = _adviseRecord @ca @e_ @m @cr f advised
+  _adviseComponent acc f advised = _adviseRecord @ca @e_ @m @cr acc f advised
 
 instance
   (Multicurryable as e_ m r advised, All ca as, cr r, Monad m) =>
   AdvisedComponent Terminal ca e_ m cr advised
   where
-  _adviseComponent f advised = advise @ca @e_ @m (f []) advised
+  _adviseComponent acc f advised = advise @ca @e_ @m (f acc) advised
 
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
@@ -797,7 +798,7 @@ adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised =>
     advised (DepT e_ m) -> 
     -- | The advised record
     advised (DepT e_ m)
-adviseRecord = _adviseRecord @ca @e_ @m @cr
+adviseRecord = _adviseRecord @ca @e_ @m @cr []
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
