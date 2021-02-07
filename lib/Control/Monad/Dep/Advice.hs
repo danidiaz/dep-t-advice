@@ -588,6 +588,17 @@ instance (
         => RecursivelyGullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right) where
     _deceiveProductRec f (gullible_left G.:*: gullible_right) = _deceiveProductRec @_ @e @e_ @m f gullible_left G.:*: _deceiveProductRec @_ @e @e_ @m f gullible_right
 
+data RecordComponent =
+      Terminal
+    | Recurse
+
+type DiscriminateComponent :: Type -> RecordComponent
+type family DiscriminateComponent c where
+    DiscriminateComponent (a -> b) = Terminal
+    DiscriminateComponent (ReaderT e m x) = Terminal
+    DiscriminateComponent (DepT e_ m x) = Terminal
+    DiscriminateComponent _ = Recurse
+
 instance (G.Generic (gullible (ReaderT e m)),
           G.Generic (gullible (DepT e_ m)),
           G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_), 
