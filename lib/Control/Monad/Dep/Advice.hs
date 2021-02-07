@@ -599,6 +599,12 @@ type family DiscriminateComponent c where
     DiscriminateComponent (DepT e_ m x) = Terminal
     DiscriminateComponent _ = Recurse
 
+type RecursivelyGullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
+class RecursivelyGullibleComponent component_type e e_ m gullible deceived | component_type e e_ m deceived -> gullible where
+    deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+
+--        => RecursivelyGullibleProduct e e_ m (S1 x (Rec0 gullible)) (S1 x (Rec0 deceived)) where
+
 instance (G.Generic (gullible (ReaderT e m)),
           G.Generic (gullible (DepT e_ m)),
           G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_), 
