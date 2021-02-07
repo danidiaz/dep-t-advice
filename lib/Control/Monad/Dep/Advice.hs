@@ -97,7 +97,7 @@ module Control.Monad.Dep.Advice
 
     -- * Making functions see a different environment
     deceive,
-    deceiveRec,
+    deceiveRecord,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -657,19 +657,19 @@ deceive = _deceive
 --
 type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
 class RecursivelyGullible e e_ m gullible where
-    _deceiveRec :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
+    _deceiveRecord :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
 
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
 type RecursivelyGullibleProduct :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
 class RecursivelyGullibleProduct e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
-    _deceiveProductRec :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
+    _deceiveProduct :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
 instance (
             RecursivelyGullibleProduct e e_ m gullible_left deceived_left,
             RecursivelyGullibleProduct e e_ m gullible_right deceived_right
         ) 
         => RecursivelyGullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right) where
-    _deceiveProductRec f (gullible_left G.:*: gullible_right) = _deceiveProductRec @_ @e @e_ @m f gullible_left G.:*: _deceiveProductRec @_ @e @e_ @m f gullible_right
+    _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
 
 data RecordComponent =
       Terminal
@@ -683,25 +683,25 @@ type family DiscriminateGullibleComponent c where
 
 type RecursivelyGullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
 class RecursivelyGullibleComponent component_type e e_ m gullible deceived | e e_ m deceived -> gullible where
-    _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+    _deceiveComponent :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
 
 instance 
     (Gullible as e e_ m r deceived, NewtypedEnv as e e_ m r deceived ~ gullible)
     =>
     RecursivelyGullibleComponent Terminal e e_ m gullible deceived where
-    _deceiveComponentRec f gullible = deceive @as @e @_ @m @r f gullible
+    _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
     
 instance 
     RecursivelyGullible e e_ m gullible 
     =>
     RecursivelyGullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m)) where
-    _deceiveComponentRec f gullible = _deceiveRec @e @e_ @m f gullible
+    _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
 
 instance 
     RecursivelyGullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived
     =>
     RecursivelyGullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived)) where
-    _deceiveProductRec f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponentRec @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible))
+    _deceiveProduct f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible))
 
 instance (G.Generic (gullible (ReaderT e m)),
           G.Generic (gullible (DepT e_ m)),
@@ -710,12 +710,12 @@ instance (G.Generic (gullible (ReaderT e m)),
           RecursivelyGullibleProduct e e_ m gullible_ deceived_
           ) 
           => RecursivelyGullible e e_ m gullible where
-    _deceiveRec f gullible = 
+    _deceiveRecord f gullible = 
         let G.M1 (G.M1 gullible_) = G.from gullible
-            deceived_ = _deceiveProductRec @_ @e @e_ @m f gullible_ 
+            deceived_ = _deceiveProduct @_ @e @e_ @m f gullible_ 
          in G.to (G.M1 (G.M1 deceived_))
 
-deceiveRec ::
+deceiveRecord ::
   forall e e_ m gullible.
   RecursivelyGullible e e_ m gullible 
   =>
@@ -725,7 +725,7 @@ deceiveRec ::
   gullible (ReaderT e m) ->
   -- | The deceived record.
   gullible (DepT e_ m)
-deceiveRec = _deceiveRec @e @e_ @m @gullible
+deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
