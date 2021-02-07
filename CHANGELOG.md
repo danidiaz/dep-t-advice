@@ -1,5 +1,14 @@
 # Revision history for dep-t-advice
 
+## 0.4.4.0 
+
+* Added 'adviseRecord' and 'deceiveRecord' that manipulate entire
+  records-of-functions (also work on newtypes) instead of a single bare
+  function. 
+
+  Useful when the components to put on the environment come in their own record
+  types.
+
 ## 0.4.0.0 
 
 * Added 'deceive' function.

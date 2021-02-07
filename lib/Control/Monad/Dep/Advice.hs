@@ -96,7 +96,8 @@ module Control.Monad.Dep.Advice
     -- * Making functions see a different environment
     deceive,
 
-    -- * Advising and deceiving whole records
+    -- * Advising and deceiving entire records
+    -- $records
     adviseRecord,
     deceiveRecord,
 
@@ -138,6 +139,8 @@ import GHC.TypeLits
 -- >>> :set -XGeneralizedNewtypeDeriving
 -- >>> :set -XDataKinds
 -- >>> :set -XScopedTypeVariables
+-- >>> :set -XDeriveGeneric
+-- >>> :set -XImportQualifiedPost
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
@@ -149,6 +152,8 @@ import GHC.TypeLits
 -- >>> import Data.Monoid
 -- >>> import System.IO
 -- >>> import Data.IORef
+-- >>> import GHC.Generics (Generic)
+-- >>> import GHC.Generics qualified 
 
 -- | A generic transformation of 'DepT'-effectful functions with environment
 -- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
@@ -729,6 +734,9 @@ instance
         deceived_ = _deceiveProduct @_ @e @e_ @m f gullible_
      in G.to (G.M1 (G.M1 deceived_))
 
+-- | Makes an entire record-of-functions see a different version of the glooal environment record, a version that might have different @HasX@ instances.
+--
+-- 'deceiveRecord' must be applied before 'adviceRecord'.
 deceiveRecord ::
   forall e e_ m gullible.
   GullibleRecord e e_ m gullible =>
@@ -813,6 +821,17 @@ instance
   where
   _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
 
+-- | Gives 'Advice' to all the functions in a record-of-functions.
+--
+-- The function that builds the advice receives a list of tuples @(TypeRep, String)@ 
+-- which represent the record types and fields names we have
+-- traversed until arriving at the advised function. It can be useful for
+-- logging advices. It's a list instead of a single tuple because
+-- 'adviseRecord' works recursively.
+-- 
+-- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
+-- and the @cr@ constraint on the result type must be supplied by means of a
+-- type application.
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
     (forall r f . (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) -> 
@@ -821,6 +840,49 @@ adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised =>
     -- | The advised record
     advised (DepT e_ m)
 adviseRecord = _adviseRecord @ca @e_ @m @cr []
+
+
+-- $records
+--
+-- Versions of 'advice' and 'deceive' that, instead of working over bare
+-- functions, transform entire records-of-functions in one go. They also work
+-- with newtypes containing a single function. The records must derive 'GHC.Generics.Generic'.
+--
+-- Useful with the \"wrapped\" style of components facilitated by @Control.Monad.Dep.Has@.
+--
+-- >>> :{
+--   type Logger :: (Type -> Type) -> Type
+--   newtype Logger d = Logger {log :: String -> d ()} deriving Generic
+--   type Repository :: (Type -> Type) -> Type
+--   data Repository d = Repository
+--     { select :: String -> d [Int],
+--       insert :: [Int] -> d ()
+--     } deriving Generic
+--   type Controller :: (Type -> Type) -> Type
+--   newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
+--   type Env :: (Type -> Type) -> Type
+--   data Env m = Env
+--     { logger :: Logger m,
+--       repository :: Repository m,
+--       controller :: Controller m
+--     }
+--   newtype Wraps x = Wraps x
+--   env :: Env (DepT Env (Writer ()))
+--   env =
+--     let logger = Logger \_ -> pure ()
+--         repository =
+--           adviseRecord @Top @Top mempty $ 
+--           deceiveRecord Wraps $
+--           Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+--         controller =
+--           adviseRecord @Top @Top mempty $ 
+--           deceiveRecord Wraps $ 
+--           Controller \_ -> pure "view"
+--      in Env {logger, repository, controller}
+-- :}
+--
+--
+
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.

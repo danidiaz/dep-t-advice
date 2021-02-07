@@ -56,7 +56,6 @@ newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
 type Env :: (Type -> Type) -> Type
 data Env m = Env
   { logger :: Logger m,
-    logger_2 :: Logger m,
     repository :: Repository m,
     controller :: Controller m
   }
@@ -67,7 +66,6 @@ newtype Wraps x = Wraps x
 env :: Env (DepT Env (Writer ()))
 env =
   let logger = Logger \_ -> pure ()
-      logger_2 = Logger \_ -> pure ()
       repository =
         adviseRecord @Top @Top mempty $ 
         deceiveRecord Wraps $
@@ -76,14 +74,13 @@ env =
         adviseRecord @Top @Top mempty $ 
         deceiveRecord Wraps $ 
         Controller \_ -> pure "view"
-   in Env {logger, logger_2, repository, controller}
+   in Env {logger, repository, controller}
 
 --
 -- to test the coercible in the definition of Has
 type EnvHKD :: (Type -> Type) -> (Type -> Type) -> Type
 data EnvHKD h m = EnvHKD
   { logger :: h (Logger m),
-    logger_2 :: h (Logger m),
     repository :: h (Repository m),
     controller :: h (Controller m)
   } deriving Generic
@@ -91,8 +88,6 @@ data EnvHKD h m = EnvHKD
 envHKD :: EnvHKD I (DepT Env (Writer ()))
 envHKD =
   let logger =
-        I $ Logger \_ -> pure ()
-      logger_2 =
         I $ Logger \_ -> pure ()
       repository =
         I $
@@ -104,14 +99,12 @@ envHKD =
           adviseRecord @Top @Top mempty $ 
           deceiveRecord Wraps $
           Controller \_ -> pure "view"
-   in adviseRecord @Top @Top mempty $ EnvHKD {logger, logger_2, repository, controller}
+   in adviseRecord @Top @Top mempty $ EnvHKD {logger, repository, controller}
 
 
 envHKD' :: EnvHKD I (DepT Env (Writer ()))
 envHKD' =
   let logger =
-        I $ Logger \_ -> pure ()
-      logger_2 =
         I $ Logger \_ -> pure ()
       repository =
         I $
@@ -121,7 +114,7 @@ envHKD' =
           Controller \_ -> pure "view"
    in adviseRecord @Top @Top mempty $ 
       deceiveRecord Wraps $
-      EnvHKD {logger, logger_2, repository, controller}
+      EnvHKD {logger, repository, controller}
 
 
 --
