@@ -119,6 +119,9 @@ import Data.SOP
 import Data.SOP.Dict
 import Data.SOP.NP
 import GHC.Generics qualified as G
+import Data.List.NonEmpty qualified as N
+import Data.Typeable
+import GHC.TypeLits
 
 -- $setup
 --
@@ -732,11 +735,11 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 --
 type AdvisedRecord :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
 class AdvisedRecord ca e_ m cr advised where
-  _adviseRecord :: (forall r. cr r => Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
+  _adviseRecord :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
 
 type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
 class AdvisedProduct ca e_ m cr advised_ where
-  _adviseProduct :: (forall r. cr r => Advice ca e_ m r) -> advised_ k -> advised_ k
+  _adviseProduct :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
@@ -766,11 +769,12 @@ type family DiscriminateAdvisedComponent c where
 
 type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
 class AdvisedComponent component_type ca e_ m cr advised where
-  _adviseComponent :: (forall r. cr r => Advice ca e_ m r) -> advised -> advised
+  _adviseComponent :: (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
-  AdvisedProduct ca e_ m cr (G.S1 x (G.Rec0 advised))
+  (AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
+   KnownSymbol fieldName) =>
+  AdvisedProduct ca e_ m cr (G.S1 ('G.MetaSel ('Just fieldname) su ss ds) (G.Rec0 advised))
   where
   _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr f advised))
 
@@ -784,11 +788,11 @@ instance
   (Multicurryable as e_ m r advised, All ca as, cr r, Monad m) =>
   AdvisedComponent Terminal ca e_ m cr advised
   where
-  _adviseComponent f advised = advise @ca @e_ @m f advised
+  _adviseComponent f advised = advise @ca @e_ @m (f []) advised
 
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
-    (forall r. cr r => Advice ca e_ m r) -> 
+    (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> 
     -- | The record to advise
     advised (DepT e_ m) -> 
     -- | The advised record
