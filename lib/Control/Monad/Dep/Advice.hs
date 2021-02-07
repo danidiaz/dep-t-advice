@@ -572,24 +572,23 @@ instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curri
   type NewtypedEnv (a ': as) e e_ m r (a -> curried) = a -> NewtypedEnv as e e_ m r curried
   _deceive f g a = deceive @as @e @e_ @m @r f (g a)
 
-type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
-class RecursivelyGullible e e_ m gullible deceived | e e_ m deceived -> gullible where
-    _deceiveRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class RecursivelyGullible e e_ m gullible where
+    _deceiveRec :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
 
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
 type RecursivelyGullibleComponent :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
 class RecursivelyGullibleComponent e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
     _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
-instance (G.Generic gullible,
-          G.Generic deceived,
-          G.Rep gullible ~ G.D1 x (G.C1 y gullible_), 
-          G.Rep deceived ~ G.D1 x (G.C1 y deceived_),
+instance (G.Generic (gullible (ReaderT e m)),
+          G.Generic (deceived (DepT e_ m)),
+          G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_), 
+          G.Rep (deceived (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
           RecursivelyGullibleComponent e e_ m gullible_ deceived_
           ) 
-          => RecursivelyGullible e e_ m gullible deceived where
-    _deceiveRec = undefined
-
+          => RecursivelyGullible e e_ m gullible where
+    _deceiveRec f gullible = undefined
 
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
