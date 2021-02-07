@@ -579,7 +579,7 @@ class RecursivelyGullible e e_ m gullible deceived | e e_ m deceived -> gullible
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
 type RecursivelyGullibleComponent :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
 class RecursivelyGullibleComponent e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
-    _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible_ x -> deceived_ x
+    _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
 instance (G.Generic gullible,
           G.Generic deceived,
