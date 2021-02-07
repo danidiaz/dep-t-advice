@@ -653,20 +653,20 @@ deceive = _deceive
 -- deceving *all* fields of a record
 --
 --
-type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
-class RecursivelyGullible e e_ m gullible where
+type GullibleRecord :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class GullibleRecord e e_ m gullible where
   _deceiveRecord :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
 
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
-type RecursivelyGullibleProduct :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
-class RecursivelyGullibleProduct e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
+type GullibleProduct :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
+class GullibleProduct e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
   _deceiveProduct :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
 instance
-  ( RecursivelyGullibleProduct e e_ m gullible_left deceived_left,
-    RecursivelyGullibleProduct e e_ m gullible_right deceived_right
+  ( GullibleProduct e e_ m gullible_left deceived_left,
+    GullibleProduct e e_ m gullible_right deceived_right
   ) =>
-  RecursivelyGullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right)
+  GullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right)
   where
   _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
 
@@ -680,25 +680,25 @@ type family DiscriminateGullibleComponent c where
   DiscriminateGullibleComponent (ReaderT e m x) = Terminal
   DiscriminateGullibleComponent _ = Recurse
 
-type RecursivelyGullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
-class RecursivelyGullibleComponent component_type e e_ m gullible deceived | e e_ m deceived -> gullible where
+type GullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
+class GullibleComponent component_type e e_ m gullible deceived | e e_ m deceived -> gullible where
   _deceiveComponent :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
 
 instance
   (Gullible as e e_ m r deceived, NewtypedEnv as e e_ m r deceived ~ gullible) =>
-  RecursivelyGullibleComponent Terminal e e_ m gullible deceived
+  GullibleComponent Terminal e e_ m gullible deceived
   where
   _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
 
 instance
-  RecursivelyGullible e e_ m gullible =>
-  RecursivelyGullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m))
+  GullibleRecord e e_ m gullible =>
+  GullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m))
   where
   _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
 
 instance
-  RecursivelyGullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
-  RecursivelyGullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived))
+  GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
+  GullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived))
   where
   _deceiveProduct f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible))
 
@@ -707,9 +707,9 @@ instance
     G.Generic (gullible (DepT e_ m)),
     G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_),
     G.Rep (gullible (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
-    RecursivelyGullibleProduct e e_ m gullible_ deceived_
+    GullibleProduct e e_ m gullible_ deceived_
   ) =>
-  RecursivelyGullible e e_ m gullible
+  GullibleRecord e e_ m gullible
   where
   _deceiveRecord f gullible =
     let G.M1 (G.M1 gullible_) = G.from gullible
@@ -718,7 +718,7 @@ instance
 
 deceiveRecord ::
   forall e e_ m gullible.
-  RecursivelyGullible e e_ m gullible =>
+  GullibleRecord e e_ m gullible =>
   -- | The newtype constructor that masks the \"true\" environment.
   (e_ (DepT e_ m) -> e) ->
   -- | The parameterized record to "deceive" recursively.
@@ -730,20 +730,20 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 -- advising *all* fields of a record
 --
 --
-type RecursivelyAdvised :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
-class RecursivelyAdvised ca e_ m advised where
+type AdvisedRecord :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class AdvisedRecord ca e_ m advised where
   _adviseRecord :: (forall r. Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
 
-type RecursivelyAdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
-class RecursivelyAdvisedProduct ca e_ m advised_ where
+type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
+class AdvisedProduct ca e_ m advised_ where
   _adviseProduct :: (forall r. Advice ca e_ m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
     G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
-    RecursivelyAdvisedProduct ca e_ m advised_
+    AdvisedProduct ca e_ m advised_
   ) =>
-  RecursivelyAdvised ca e_ m advised
+  AdvisedRecord ca e_ m advised
   where
   _adviseRecord advice unadvised =
     let G.M1 (G.M1 unadvised_) = G.from unadvised
@@ -751,10 +751,10 @@ instance
      in G.to (G.M1 (G.M1 advised_))
 
 instance
-  ( RecursivelyAdvisedProduct ca e_ m advised_left,
-    RecursivelyAdvisedProduct ca e_ m advised_right
+  ( AdvisedProduct ca e_ m advised_left,
+    AdvisedProduct ca e_ m advised_right
   ) =>
-  RecursivelyAdvisedProduct ca e_ m (advised_left G.:*: advised_right)
+  AdvisedProduct ca e_ m (advised_left G.:*: advised_right)
   where
   _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m f unadvised_right
 
@@ -764,29 +764,29 @@ type family DiscriminateAdvisedComponent c where
   DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
   DiscriminateAdvisedComponent _ = Recurse
 
-type RecursivelyAdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Constraint
-class RecursivelyAdvisedComponent component_type ca e_ m advised where
+type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Constraint
+class AdvisedComponent component_type ca e_ m advised where
   _adviseComponent :: (forall r. Advice ca e_ m r) -> advised -> advised
 
 instance
-  RecursivelyAdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m advised =>
-  RecursivelyAdvisedProduct ca e_ m (G.S1 x (G.Rec0 advised))
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m advised =>
+  AdvisedProduct ca e_ m (G.S1 x (G.Rec0 advised))
   where
   _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m f advised))
 
 instance
-  RecursivelyAdvised ca e_ m advisable =>
-  RecursivelyAdvisedComponent Recurse ca e_ m (advisable (DepT e_ m))
+  AdvisedRecord ca e_ m advisable =>
+  AdvisedComponent Recurse ca e_ m (advisable (DepT e_ m))
   where
   _adviseComponent f advised = _adviseRecord @ca @e_ @m f advised
 
 instance
   (Multicurryable as e_ m r advised, All ca as, Monad m) =>
-  RecursivelyAdvisedComponent Terminal ca e_ m advised
+  AdvisedComponent Terminal ca e_ m advised
   where
   _adviseComponent f advised = advise @ca @e_ @m f advised
 
-adviseRecord :: forall ca e_ m advised. RecursivelyAdvised ca e_ m advised => 
+adviseRecord :: forall ca e_ m advised. AdvisedRecord ca e_ m advised => 
     -- | The advice to apply
     (forall r. Advice ca e_ m r) -> 
     -- | The record to advise
