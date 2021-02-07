@@ -673,8 +673,9 @@ instance
   where
   _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
 
-data RecordComponent
+data RecordComponent 
   = Terminal
+  | IWrapped
   | Recurse
 
 type DiscriminateGullibleComponent :: Type -> RecordComponent
@@ -767,6 +768,7 @@ type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
   DiscriminateAdvisedComponent (a -> b) = Terminal
   DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
+  DiscriminateAdvisedComponent (I _) = IWrapped
   DiscriminateAdvisedComponent _ = Recurse
 
 type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
@@ -794,6 +796,13 @@ instance
   AdvisedComponent Terminal ca e_ m cr advised
   where
   _adviseComponent acc f advised = advise @ca @e_ @m (f acc) advised
+
+instance
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised
+  =>
+  AdvisedComponent IWrapped ca e_ m cr (I advised)
+  where
+  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
 
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
