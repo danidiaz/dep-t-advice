@@ -600,10 +600,14 @@ type family DiscriminateComponent c where
     DiscriminateComponent _ = Recurse
 
 type RecursivelyGullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
-class RecursivelyGullibleComponent component_type e e_ m gullible deceived | component_type e e_ m deceived -> gullible where
-    deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+class RecursivelyGullibleComponent component_type e e_ m gullible deceived | e e_ m deceived -> gullible where
+    _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
 
---        => RecursivelyGullibleProduct e e_ m (S1 x (Rec0 gullible)) (S1 x (Rec0 deceived)) where
+instance 
+    RecursivelyGullibleComponent (DiscriminateComponent gullible) e e_ m gullible deceived
+    =>
+    RecursivelyGullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived)) where
+    _deceiveProductRec f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponentRec @(DiscriminateComponent gullible) @e @e_ @m f gullible))
 
 instance (G.Generic (gullible (ReaderT e m)),
           G.Generic (gullible (DepT e_ m)),
