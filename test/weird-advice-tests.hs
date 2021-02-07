@@ -69,9 +69,11 @@ env =
   let logger = Logger \_ -> pure ()
       logger_2 = Logger \_ -> pure ()
       repository =
+        adviseRecord @Top @Top mempty $ 
         deceiveRecord Wraps $
         Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
+        adviseRecord @Top @Top mempty $ 
         deceiveRecord Wraps $ 
         Controller \_ -> pure "view"
    in Env {logger, logger_2, repository, controller}
