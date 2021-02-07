@@ -756,6 +756,22 @@ instance (
         => RecursivelyAdvisedProduct ca e_ m (advised_left G.:*: advised_right) where
     _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m f unadvised_right
 
+type DiscriminateAdvisedComponent :: Type -> RecordComponent
+type family DiscriminateAdvisedComponent c where
+    DiscriminateAdvisedComponent (a -> b) = Terminal
+    DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
+    DiscriminateAdvisedComponent _ = Recurse
+
+type RecursivelyAdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Constraint
+class RecursivelyAdvisedComponent component_type ca e_ m advised where
+    _adviseComponent :: (forall r . Advice ca e_ m r) -> advised -> advised
+
+instance 
+    RecursivelyAdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m advised
+    =>
+    RecursivelyAdvisedProduct ca e_ m (G.S1 x (G.Rec0 advised)) where
+    _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m f advised))
+
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
