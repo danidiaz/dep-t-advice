@@ -17,8 +17,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
-{-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE DataKinds #-}
 
 -- |
 --    This package provides the 'Advice' datatype, along for functions for creating,
@@ -97,6 +95,9 @@ module Control.Monad.Dep.Advice
 
     -- * Making functions see a different environment
     deceive,
+
+    -- * Advising and deceiving whole records
+    adviseRecord,
     deceiveRecord,
 
     -- * "sop-core" re-exports
@@ -112,7 +113,7 @@ module Control.Monad.Dep.Advice
 where
 
 import Control.Monad.Dep
-import Control.Monad.Trans.Reader (ReaderT(..),withReaderT)
+import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Kind
 import Data.SOP
 import Data.SOP.Dict
@@ -360,7 +361,7 @@ data Pair a b = Pair !a !b
 -- of that as well.
 type Ensure :: ((Type -> Type) -> Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
 
-type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m)) 
+type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m))
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
@@ -573,7 +574,6 @@ instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curri
   type NewtypedEnv (a ': as) e e_ m r (a -> curried) = a -> NewtypedEnv as e e_ m r curried
   _deceive f g a = deceive @as @e @e_ @m @r f (g a)
 
-
 -- | Makes a function see a newtyped version of the environment record, a version that might have different @HasX@ instances.
 --
 -- The \"deception\" doesn't affect the dependencies used by the function, only the function itself.
@@ -600,27 +600,27 @@ instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curri
 --    logger = _logger1
 --  instance HasIntermediate m (Env m) where
 --    intermediate = _intermediate
---  newtype Switcheroo m = Switcheroo (Env m) 
+--  newtype Switcheroo m = Switcheroo (Env m)
 --      deriving newtype (HasIntermediate m)
 --  instance HasLogger m (Switcheroo m) where
 --    logger (Switcheroo e) = _logger2 e
 --  env :: Env (DepT Env (Writer [String]))
---  env = 
---    let mkController :: forall d e m. MonadDep [HasLogger, HasIntermediate] d e m => Int -> m () 
+--  env =
+--    let mkController :: forall d e m. MonadDep [HasLogger, HasIntermediate] d e m => Int -> m ()
 --        mkController _ = do e <- ask; liftD $ logger e "foo" ; liftD $ intermediate e "foo"
---        mkIntermediate :: forall d e m. MonadDep '[HasLogger] d e m => String -> m () 
---        mkIntermediate _ = do e <- ask ; liftD $ logger e "foo" 
---     in Env 
+--        mkIntermediate :: forall d e m. MonadDep '[HasLogger] d e m => String -> m ()
+--        mkIntermediate _ = do e <- ask ; liftD $ logger e "foo"
+--     in Env
 --        {
---          _logger1 = 
+--          _logger1 =
 --             \_ -> tell ["logger 1"],
---          _logger2 = 
+--          _logger2 =
 --             \_ -> tell ["logger 2"],
 --          _intermediate =
---             mkIntermediate, 
---          _controllerA = 
+--             mkIntermediate,
+--          _controllerA =
 --             mkController,
---          _controllerB = 
+--          _controllerB =
 --             deceive Switcheroo $
 --             mkController
 --        }
@@ -639,7 +639,6 @@ instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curri
 -- Note that the function that is \"deceived\" must be polymorphic over
 -- 'Control.Monad.Dep.MonadDep'. Passing a function whose effect monad has
 -- already \"collapsed\" into 'DepT' won't work. Therefore, 'deceive' must be applied before any 'Advice'.
---
 deceive ::
   forall as e e_ m r curried.
   Gullible as e e_ m r curried =>
@@ -651,74 +650,75 @@ deceive ::
   curried
 deceive = _deceive
 
-
 -- deceving *all* fields of a record
 --
 --
 type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
 class RecursivelyGullible e e_ m gullible where
-    _deceiveRecord :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
+  _deceiveRecord :: (e_ (DepT e_ m) -> e) -> gullible (ReaderT e m) -> gullible (DepT e_ m)
 
 -- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
 type RecursivelyGullibleProduct :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
 class RecursivelyGullibleProduct e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
-    _deceiveProduct :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
+  _deceiveProduct :: (e_ (DepT e_ m) -> e) -> gullible_ k -> deceived_ k
 
-instance (
-            RecursivelyGullibleProduct e e_ m gullible_left deceived_left,
-            RecursivelyGullibleProduct e e_ m gullible_right deceived_right
-        ) 
-        => RecursivelyGullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right) where
-    _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
+instance
+  ( RecursivelyGullibleProduct e e_ m gullible_left deceived_left,
+    RecursivelyGullibleProduct e e_ m gullible_right deceived_right
+  ) =>
+  RecursivelyGullibleProduct e e_ m (gullible_left G.:*: gullible_right) (deceived_left G.:*: deceived_right)
+  where
+  _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
 
-data RecordComponent =
-      Terminal
-    | Recurse
+data RecordComponent
+  = Terminal
+  | Recurse
 
 type DiscriminateGullibleComponent :: Type -> RecordComponent
 type family DiscriminateGullibleComponent c where
-    DiscriminateGullibleComponent (a -> b) = Terminal
-    DiscriminateGullibleComponent (ReaderT e m x) = Terminal
-    DiscriminateGullibleComponent _ = Recurse
+  DiscriminateGullibleComponent (a -> b) = Terminal
+  DiscriminateGullibleComponent (ReaderT e m x) = Terminal
+  DiscriminateGullibleComponent _ = Recurse
 
 type RecursivelyGullibleComponent :: RecordComponent -> Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
 class RecursivelyGullibleComponent component_type e e_ m gullible deceived | e e_ m deceived -> gullible where
-    _deceiveComponent :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+  _deceiveComponent :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
 
-instance 
-    (Gullible as e e_ m r deceived, NewtypedEnv as e e_ m r deceived ~ gullible)
-    =>
-    RecursivelyGullibleComponent Terminal e e_ m gullible deceived where
-    _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
-    
-instance 
-    RecursivelyGullible e e_ m gullible 
-    =>
-    RecursivelyGullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m)) where
-    _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
+instance
+  (Gullible as e e_ m r deceived, NewtypedEnv as e e_ m r deceived ~ gullible) =>
+  RecursivelyGullibleComponent Terminal e e_ m gullible deceived
+  where
+  _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
 
-instance 
-    RecursivelyGullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived
-    =>
-    RecursivelyGullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived)) where
-    _deceiveProduct f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible))
+instance
+  RecursivelyGullible e e_ m gullible =>
+  RecursivelyGullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m))
+  where
+  _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
 
-instance (G.Generic (gullible (ReaderT e m)),
-          G.Generic (gullible (DepT e_ m)),
-          G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_), 
-          G.Rep (gullible (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
-          RecursivelyGullibleProduct e e_ m gullible_ deceived_
-          ) 
-          => RecursivelyGullible e e_ m gullible where
-    _deceiveRecord f gullible = 
-        let G.M1 (G.M1 gullible_) = G.from gullible
-            deceived_ = _deceiveProduct @_ @e @e_ @m f gullible_ 
-         in G.to (G.M1 (G.M1 deceived_))
+instance
+  RecursivelyGullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
+  RecursivelyGullibleProduct e e_ m (G.S1 x (G.Rec0 gullible)) (G.S1 x (G.Rec0 deceived))
+  where
+  _deceiveProduct f (G.M1 (G.K1 gullible)) = G.M1 (G.K1 (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible))
+
+instance
+  ( G.Generic (gullible (ReaderT e m)),
+    G.Generic (gullible (DepT e_ m)),
+    G.Rep (gullible (ReaderT e m)) ~ G.D1 x (G.C1 y gullible_),
+    G.Rep (gullible (DepT e_ m)) ~ G.D1 x (G.C1 y deceived_),
+    RecursivelyGullibleProduct e e_ m gullible_ deceived_
+  ) =>
+  RecursivelyGullible e e_ m gullible
+  where
+  _deceiveRecord f gullible =
+    let G.M1 (G.M1 gullible_) = G.from gullible
+        deceived_ = _deceiveProduct @_ @e @e_ @m f gullible_
+     in G.to (G.M1 (G.M1 deceived_))
 
 deceiveRecord ::
   forall e e_ m gullible.
-  RecursivelyGullible e e_ m gullible 
-  =>
+  RecursivelyGullible e e_ m gullible =>
   -- | The newtype constructor that masks the \"true\" environment.
   (e_ (DepT e_ m) -> e) ->
   -- | The parameterized record to "deceive" recursively.
@@ -727,51 +727,73 @@ deceiveRecord ::
   gullible (DepT e_ m)
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
-
 -- advising *all* fields of a record
 --
 --
 type RecursivelyAdvised :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
 class RecursivelyAdvised ca e_ m advised where
-    _adviseRecord :: (forall r . Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
+  _adviseRecord :: (forall r. Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
 
 type RecursivelyAdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
 class RecursivelyAdvisedProduct ca e_ m advised_ where
-    _adviseProduct :: (forall r . Advice ca e_ m r) -> advised_ k -> advised_ k
+  _adviseProduct :: (forall r. Advice ca e_ m r) -> advised_ k -> advised_ k
 
-instance (G.Generic (advised (DepT e_ m)),
-          G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
-          RecursivelyAdvisedProduct ca e_ m advised_
-          ) 
-          => RecursivelyAdvised ca e_ m advised where
-    _adviseRecord advice unadvised = 
-        let G.M1 (G.M1 unadvised_) = G.from unadvised
-            advised_ = _adviseProduct @_ @ca @e_ @m advice unadvised_ 
-         in G.to (G.M1 (G.M1 advised_))
+instance
+  ( G.Generic (advised (DepT e_ m)),
+    G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+    RecursivelyAdvisedProduct ca e_ m advised_
+  ) =>
+  RecursivelyAdvised ca e_ m advised
+  where
+  _adviseRecord advice unadvised =
+    let G.M1 (G.M1 unadvised_) = G.from unadvised
+        advised_ = _adviseProduct @_ @ca @e_ @m advice unadvised_
+     in G.to (G.M1 (G.M1 advised_))
 
-instance (
-            RecursivelyAdvisedProduct ca e_ m advised_left,
-            RecursivelyAdvisedProduct ca e_ m advised_right
-        ) 
-        => RecursivelyAdvisedProduct ca e_ m (advised_left G.:*: advised_right) where
-    _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m f unadvised_right
+instance
+  ( RecursivelyAdvisedProduct ca e_ m advised_left,
+    RecursivelyAdvisedProduct ca e_ m advised_right
+  ) =>
+  RecursivelyAdvisedProduct ca e_ m (advised_left G.:*: advised_right)
+  where
+  _adviseProduct f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m f unadvised_right
 
 type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
-    DiscriminateAdvisedComponent (a -> b) = Terminal
-    DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
-    DiscriminateAdvisedComponent _ = Recurse
+  DiscriminateAdvisedComponent (a -> b) = Terminal
+  DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
+  DiscriminateAdvisedComponent _ = Recurse
 
 type RecursivelyAdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Constraint
 class RecursivelyAdvisedComponent component_type ca e_ m advised where
-    _adviseComponent :: (forall r . Advice ca e_ m r) -> advised -> advised
+  _adviseComponent :: (forall r. Advice ca e_ m r) -> advised -> advised
 
-instance 
-    RecursivelyAdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m advised
-    =>
-    RecursivelyAdvisedProduct ca e_ m (G.S1 x (G.Rec0 advised)) where
-    _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m f advised))
+instance
+  RecursivelyAdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m advised =>
+  RecursivelyAdvisedProduct ca e_ m (G.S1 x (G.Rec0 advised))
+  where
+  _adviseProduct f (G.M1 (G.K1 advised)) = G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m f advised))
 
+instance
+  RecursivelyAdvised ca e_ m advisable =>
+  RecursivelyAdvisedComponent Recurse ca e_ m (advisable (DepT e_ m))
+  where
+  _adviseComponent f advised = _adviseRecord @ca @e_ @m f advised
+
+instance
+  (Multicurryable as e_ m r advised, All ca as, Monad m) =>
+  RecursivelyAdvisedComponent Terminal ca e_ m advised
+  where
+  _adviseComponent f advised = advise @ca @e_ @m f advised
+
+adviseRecord :: forall ca e_ m advised. RecursivelyAdvised ca e_ m advised => 
+    -- | The advice to apply
+    (forall r. Advice ca e_ m r) -> 
+    -- | The record to advise
+    advised (DepT e_ m) -> 
+    -- | The advised record
+    advised (DepT e_ m)
+adviseRecord = _adviseRecord @ca @e_ @m
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
