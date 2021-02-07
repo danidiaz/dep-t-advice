@@ -18,6 +18,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE DataKinds #-}
 
 -- |
 --    This package provides the 'Advice' datatype, along for functions for creating,
@@ -572,14 +573,19 @@ instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curri
   _deceive f g a = deceive @as @e @e_ @m @r f (g a)
 
 type RecursivelyGullible :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Type -> Constraint
-class RecursivelyGullible e e_ m gullible deceived | deceived e -> gullible where
+class RecursivelyGullible e e_ m gullible deceived | e e_ m deceived -> gullible where
     _deceiveRec :: (e_ (DepT e_ m) -> e) -> gullible -> deceived
+
+-- https://gitlab.haskell.org/ghc/ghc/-/issues/13952
+type RecursivelyGullibleComponent :: Type -> ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> (k -> Type) -> Constraint
+class RecursivelyGullibleComponent e e_ m gullible_ deceived_ | e e_ m deceived_ -> gullible_ where
+    _deceiveComponentRec :: (e_ (DepT e_ m) -> e) -> gullible_ x -> deceived_ x
 
 instance (G.Generic gullible,
           G.Generic deceived,
-          G.Rep gullible ~ G.D1 x (G.C1 y prod1), 
-          G.Rep deceived ~ G.D1 x (G.C1 y prod2),
-          RecursivelyGullible e e_ m prod1 prod2
+          G.Rep gullible ~ G.D1 x (G.C1 y gullible_), 
+          G.Rep deceived ~ G.D1 x (G.C1 y deceived_),
+          RecursivelyGullibleComponent e e_ m gullible_ deceived_
           ) 
           => RecursivelyGullible e e_ m gullible deceived where
     _deceiveRec = undefined
