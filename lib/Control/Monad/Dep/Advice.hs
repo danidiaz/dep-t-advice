@@ -734,7 +734,7 @@ instance
         deceived_ = _deceiveProduct @_ @e @e_ @m f gullible_
      in G.to (G.M1 (G.M1 deceived_))
 
--- | Makes an entire record-of-functions see a different version of the glooal environment record, a version that might have different @HasX@ instances.
+-- | Makes an entire record-of-functions see a different version of the global environment record, a version that might have different @HasX@ instances.
 --
 -- 'deceiveRecord' must be applied before 'adviseRecord'.
 deceiveRecord ::
