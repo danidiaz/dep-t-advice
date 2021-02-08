@@ -742,7 +742,7 @@ deceiveRecord ::
   GullibleRecord e e_ m gullible =>
   -- | The newtype constructor that masks the \"true\" environment.
   (e_ (DepT e_ m) -> e) ->
-  -- | The record to deceive recursively.
+  -- | The record to deceive recursively. The monad parameter must be left polymorphic over @MonadDep@, so that it can unify with `ReaderT`.
   gullible (ReaderT e m) ->
   -- | The deceived record.
   gullible (DepT e_ m)
@@ -833,11 +833,11 @@ instance
 -- and the @cr@ constraint on the result type must be supplied by means of a
 -- type application. Supply 'Top' if no constraint is required.
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
-    -- | The advice to apply
+    -- | The advice to apply.
     (forall r f . (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) -> 
     -- | The record to advise recursively.
     advised (DepT e_ m) -> 
-    -- | The advised record
+    -- | The advised record.
     advised (DepT e_ m)
 adviseRecord = _adviseRecord @ca @e_ @m @cr []
 
