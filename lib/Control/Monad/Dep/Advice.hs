@@ -736,13 +736,13 @@ instance
 
 -- | Makes an entire record-of-functions see a different version of the glooal environment record, a version that might have different @HasX@ instances.
 --
--- 'deceiveRecord' must be applied before 'adviceRecord'.
+-- 'deceiveRecord' must be applied before 'adviseRecord'.
 deceiveRecord ::
   forall e e_ m gullible.
   GullibleRecord e e_ m gullible =>
   -- | The newtype constructor that masks the \"true\" environment.
   (e_ (DepT e_ m) -> e) ->
-  -- | The parameterized record to "deceive" recursively.
+  -- | The record to deceive recursively.
   gullible (ReaderT e m) ->
   -- | The deceived record.
   gullible (DepT e_ m)
@@ -825,17 +825,17 @@ instance
 --
 -- The function that builds the advice receives a list of tuples @(TypeRep, String)@ 
 -- which represent the record types and fields names we have
--- traversed until arriving at the advised function. It can be useful for
+-- traversed until arriving at the advised function. This info can be useful for
 -- logging advices. It's a list instead of a single tuple because
 -- 'adviseRecord' works recursively.
 -- 
 -- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
 -- and the @cr@ constraint on the result type must be supplied by means of a
--- type application.
+-- type application. Supply 'Top' if no constraint is required.
 adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
     -- | The advice to apply
     (forall r f . (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) -> 
-    -- | The record to advise
+    -- | The record to advise recursively.
     advised (DepT e_ m) -> 
     -- | The advised record
     advised (DepT e_ m)
@@ -844,7 +844,7 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 
 -- $records
 --
--- Versions of 'advice' and 'deceive' that, instead of working over bare
+-- Versions of 'advise' and 'deceive' that, instead of working on bare
 -- functions, transform entire records-of-functions in one go. They also work
 -- with newtypes containing a single function. The records must derive 'GHC.Generics.Generic'.
 --
