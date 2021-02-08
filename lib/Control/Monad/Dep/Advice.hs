@@ -899,6 +899,27 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 --
 --
 
+type EnvRank2Bifunctor :: ((Type -> Type) -> (Type -> Type) -> Type) -> Constraint
+class EnvRank2Bifunctor e where
+    sequenceEnv :: Applicative g => e g h -> g (e I h)
+
+type ProductRank2Bifunctor :: (k -> Type) -> (k -> Type) -> Constraint
+class ProductRank2Bifunctor before after | before -> after where
+    sequenceProduct :: Applicative g => before k -> g (after k)
+
+-- instance
+--   ( G.Generic (advised (DepT e_ m)),
+--     -- G.Rep (advised (DepT e_ m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
+--     G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+--     AdvisedProduct ca e_ m cr advised_
+--   ) =>
+--   EnvRank2Bifunctor e
+--   where
+--   _adviseRecord acc f unadvised =
+--     let G.M1 (G.M1 unadvised_) = G.from unadvised
+--         advised_ = _adviseProduct @_ @ca @e_ @m @cr (typeRep (Proxy @advised)) acc f unadvised_
+--      in G.to (G.M1 (G.M1 advised_))
+
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
