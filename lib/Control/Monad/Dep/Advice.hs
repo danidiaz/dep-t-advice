@@ -92,6 +92,7 @@ module Control.Monad.Dep.Advice
     -- $invocation
     runFinalDepT,
     runFromEnv,
+    runFromDep,
 
     -- * Making functions see a different environment
     deceive,
@@ -114,6 +115,7 @@ module Control.Monad.Dep.Advice
 where
 
 import Control.Monad.Dep
+import Control.Monad.Dep.Has
 import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Kind
 import Data.SOP
@@ -489,6 +491,20 @@ runFromEnv ::
   DownToBaseMonad as e_ m r curried
 runFromEnv = _runFromEnv
 
+-- | Like 'runFromEnv', but the function to run is extracted from a dependency
+-- @dep@ which is found using 'Has'. The selector should be concrete enough to
+-- identify @dep@ in the environment.
+runFromDep ::
+  forall dep as e_ m r curried.
+  (Multicurryable as e_ m r curried, Has dep (DepT e_ m) (e_ (DepT e_ m))) =>
+  -- | action that gets hold of the environment
+  m (e_ (DepT e_ m)) ->
+  -- | selector that gets a function from a dependency found using 'Has'
+  (dep (DepT e_ m) -> curried) ->
+  -- | a new function with effects in the base monad
+  DownToBaseMonad as e_ m r curried
+runFromDep envAction member = _runFromEnv envAction (member . dep)
+
 -- $restrict
 --
 --    'Advice' values can be composed using the 'Monoid' instance, but only if
@@ -844,7 +860,7 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 
 -- $records
 --
--- Versions of 'advise' and 'deceive' that, instead of working on bare
+-- 'adviseRecord' and 'deceiveRecord' are versions of 'advise' and 'deceive' that, instead of working on bare
 -- functions, transform entire records-of-functions in one go. They also work
 -- with newtypes containing a single function. The records must derive 'GHC.Generics.Generic'.
 --

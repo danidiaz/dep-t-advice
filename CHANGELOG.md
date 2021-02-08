@@ -1,5 +1,12 @@
 # Revision history for dep-t-advice
 
+
+## 0.4.5.0 
+
+* Added runFromDep.
+
+  This required bumping the minimum version of dep-t to 0.4.4.0.
+
 ## 0.4.4.0 
 
 * Added 'adviseRecord' and 'deceiveRecord' that manipulate entire

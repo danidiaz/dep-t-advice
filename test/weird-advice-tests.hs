@@ -25,6 +25,7 @@
 module Main (main) where
 
 import Control.Monad.Dep
+import Control.Monad.Dep.Has
 import Control.Monad.Dep.Advice
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -43,15 +44,21 @@ import Prelude hiding (log)
 -- There are indeed some higher kinded types for which GHC can currently derive Generic1 instances, but the feature is so limited it's hardly worth mentioning. This is mostly an artifact of taking the original implementation of Generic1 intended for * -> * (which already has serious limitations), turning on PolyKinds, and keeping whatever sticks, which is not much.
 type Logger :: (Type -> Type) -> Type
 newtype Logger d = Logger {log :: String -> d ()} deriving Generic
+instance Dep Logger where
+    type DefaultFieldName Logger = "logger"
 
 type Repository :: (Type -> Type) -> Type
 data Repository d = Repository
   { select :: String -> d [Int],
     insert :: [Int] -> d ()
   } deriving Generic
+instance Dep Repository where
+    type DefaultFieldName Repository = "repository"
 
 type Controller :: (Type -> Type) -> Type
 newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
+instance Dep Controller where
+    type DefaultFieldName Controller = "controller"
 
 type Env :: (Type -> Type) -> Type
 data Env m = Env
@@ -59,6 +66,9 @@ data Env m = Env
     repository :: Repository m,
     controller :: Controller m
   }
+instance Has Logger m (Env m)
+instance Has Repository m (Env m)
+instance Has Controller m (Env m)
 
 -- dumb wrapper newtype
 newtype Wraps x = Wraps x
@@ -75,6 +85,12 @@ env =
         deceiveRecord Wraps $ 
         Controller \_ -> pure "view"
    in Env {logger, repository, controller}
+
+
+
+
+ran :: Writer () String
+ran = runFromDep (pure env) serve 7
 
 --
 -- to test the coercible in the definition of Has
