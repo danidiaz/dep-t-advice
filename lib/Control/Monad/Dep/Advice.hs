@@ -901,11 +901,26 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 
 type EnvRank2Bifunctor :: ((Type -> Type) -> (Type -> Type) -> Type) -> Constraint
 class EnvRank2Bifunctor e where
-    sequenceEnv :: Applicative g => e g h -> g (e I h)
+    _sequenceEnv :: Applicative g => e g h -> g (e I h)
+
+instance
+  ( G.Generic (r g h),
+    G.Generic (r I h),
+    -- G.Rep (advised (DepT e_ m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
+    G.Rep (r g h) ~ G.D1 x (G.C1 y before),
+    G.Rep (r I h) ~ G.D1 x (G.C1 y after),
+    ProductRank2Bifunctor before after
+  ) =>
+  EnvRank2Bifunctor r
+  where
+  _sequenceEnv e = 
+    let G.M1 (G.M1 before) = G.from e
+        after = _sequenceProduct @_ @before @after before
+     in (\z -> G.to (G.M1 (G.M1 z))) <$> after
 
 type ProductRank2Bifunctor :: (k -> Type) -> (k -> Type) -> Constraint
 class ProductRank2Bifunctor before after | before -> after where
-    sequenceProduct :: Applicative g => before k -> g (after k)
+    _sequenceProduct :: Applicative g => before k -> g (after k)
 
 -- instance
 --   ( G.Generic (advised (DepT e_ m)),
