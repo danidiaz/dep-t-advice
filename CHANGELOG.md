@@ -1,5 +1,10 @@
 # Revision history for dep-t-advice
 
+## 0.4.6.0 
+
+* `adviseRecord` and `deceiveRecord` now work with records having fields wrapped in `Identity`.
+
+  This is for better compatibility with the [barbies](http://hackage.haskell.org/package/barbies) package.
 
 ## 0.4.5.0 
 

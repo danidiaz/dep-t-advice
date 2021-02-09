@@ -117,13 +117,14 @@ where
 import Control.Monad.Dep
 import Control.Monad.Dep.Has
 import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
+import Data.Functor.Identity
 import Data.Kind
+import Data.List.NonEmpty qualified as N
 import Data.SOP
 import Data.SOP.Dict
 import Data.SOP.NP
-import GHC.Generics qualified as G
-import Data.List.NonEmpty qualified as N
 import Data.Typeable
+import GHC.Generics qualified as G
 import GHC.TypeLits
 
 -- $setup
@@ -155,7 +156,7 @@ import GHC.TypeLits
 -- >>> import System.IO
 -- >>> import Data.IORef
 -- >>> import GHC.Generics (Generic)
--- >>> import GHC.Generics qualified 
+-- >>> import GHC.Generics qualified
 
 -- | A generic transformation of 'DepT'-effectful functions with environment
 -- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
@@ -694,7 +695,7 @@ instance
   where
   _deceiveProduct f (gullible_left G.:*: gullible_right) = _deceiveProduct @_ @e @e_ @m f gullible_left G.:*: _deceiveProduct @_ @e @e_ @m f gullible_right
 
-data RecordComponent 
+data RecordComponent
   = Terminal
   | IWrapped
   | Recurse
@@ -703,6 +704,7 @@ type DiscriminateGullibleComponent :: Type -> RecordComponent
 type family DiscriminateGullibleComponent c where
   DiscriminateGullibleComponent (a -> b) = Terminal
   DiscriminateGullibleComponent (ReaderT e m x) = Terminal
+  DiscriminateGullibleComponent (Identity _) = IWrapped
   DiscriminateGullibleComponent (I _) = IWrapped
   DiscriminateGullibleComponent _ = Recurse
 
@@ -717,8 +719,13 @@ instance
   _deceiveComponent f gullible = deceive @as @e @_ @m @r f gullible
 
 instance
-  GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived
-  =>
+  GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
+  GullibleComponent IWrapped e e_ m (Identity gullible) (Identity deceived)
+  where
+  _deceiveComponent f (Identity gullible) = Identity (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible)
+
+instance
+  GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
   GullibleComponent IWrapped e e_ m (I gullible) (I deceived)
   where
   _deceiveComponent f (I gullible) = I (_deceiveComponent @(DiscriminateGullibleComponent gullible) @e @e_ @m f gullible)
@@ -728,7 +735,6 @@ instance
   GullibleComponent Recurse e e_ m (gullible (ReaderT e m)) (gullible (DepT e_ m))
   where
   _deceiveComponent f gullible = _deceiveRecord @e @e_ @m f gullible
-
 
 instance
   GullibleComponent (DiscriminateGullibleComponent gullible) e e_ m gullible deceived =>
@@ -801,6 +807,7 @@ type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
   DiscriminateAdvisedComponent (a -> b) = Terminal
   DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
+  DiscriminateAdvisedComponent (Identity _) = IWrapped
   DiscriminateAdvisedComponent (I _) = IWrapped
   DiscriminateAdvisedComponent _ = Recurse
 
@@ -809,13 +816,13 @@ class AdvisedComponent component_type ca e_ m cr advised where
   _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
 
 instance
-  (AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
-   KnownSymbol fieldName
-   ) =>
-  AdvisedProduct ca e_ m cr (G.S1 ('G.MetaSel ('Just fieldName) su ss ds) (G.Rec0 advised))
+  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
+    KnownSymbol fieldName
+  ) =>
+  AdvisedProduct ca e_ m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
   where
-  _adviseProduct tr acc f (G.M1 (G.K1 advised)) = 
-     let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
+  _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
+    let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
      in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc' f advised))
 
 instance
@@ -831,32 +838,38 @@ instance
   _adviseComponent acc f advised = advise @ca @e_ @m (f acc) advised
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised
-  =>
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
+  AdvisedComponent IWrapped ca e_ m cr (Identity advised)
+  where
+  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
+
+instance
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
   AdvisedComponent IWrapped ca e_ m cr (I advised)
   where
   _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
 
 -- | Gives 'Advice' to all the functions in a record-of-functions.
 --
--- The function that builds the advice receives a list of tuples @(TypeRep, String)@ 
+-- The function that builds the advice receives a list of tuples @(TypeRep, String)@
 -- which represent the record types and fields names we have
 -- traversed until arriving at the advised function. This info can be useful for
 -- logging advices. It's a list instead of a single tuple because
 -- 'adviseRecord' works recursively.
--- 
+--
 -- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
 -- and the @cr@ constraint on the result type must be supplied by means of a
 -- type application. Supply 'Top' if no constraint is required.
-adviseRecord :: forall ca cr e_ m advised. AdvisedRecord ca e_ m cr advised => 
-    -- | The advice to apply.
-    (forall r f . (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) -> 
-    -- | The record to advise recursively.
-    advised (DepT e_ m) -> 
-    -- | The advised record.
-    advised (DepT e_ m)
+adviseRecord ::
+  forall ca cr e_ m advised.
+  AdvisedRecord ca e_ m cr advised =>
+  -- | The advice to apply.
+  (forall r f. (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) ->
+  -- | The record to advise recursively.
+  advised (DepT e_ m) ->
+  -- | The advised record.
+  advised (DepT e_ m)
 adviseRecord = _adviseRecord @ca @e_ @m @cr []
-
 
 -- $records
 --
@@ -887,18 +900,15 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 --   env =
 --     let logger = Logger \_ -> pure ()
 --         repository =
---           adviseRecord @Top @Top mempty $ 
+--           adviseRecord @Top @Top mempty $
 --           deceiveRecord Wraps $
 --           Repository {select = \_ -> pure [], insert = \_ -> pure ()}
 --         controller =
---           adviseRecord @Top @Top mempty $ 
---           deceiveRecord Wraps $ 
+--           adviseRecord @Top @Top mempty $
+--           deceiveRecord Wraps $
 --           Controller \_ -> pure "view"
 --      in Env {logger, repository, controller}
 -- :}
---
---
-
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.

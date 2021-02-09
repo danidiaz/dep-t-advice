@@ -20,16 +20,17 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module Main (main) where
 
+import Barbies
 import Control.Monad.Dep
-import Control.Monad.Dep.Has
 import Control.Monad.Dep.Advice
+import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Coerce
+import Data.Functor.Identity
 import Data.Kind
 import Data.List (intercalate)
 import Data.SOP
@@ -39,30 +40,36 @@ import Rank2.TH qualified
 import Test.Tasty
 import Test.Tasty.HUnit
 import Prelude hiding (log)
-import Barbies
 
 -- https://stackoverflow.com/questions/53498707/cant-derive-generic-for-this-type/53499091#53499091
 -- There are indeed some higher kinded types for which GHC can currently derive Generic1 instances, but the feature is so limited it's hardly worth mentioning. This is mostly an artifact of taking the original implementation of Generic1 intended for * -> * (which already has serious limitations), turning on PolyKinds, and keeping whatever sticks, which is not much.
 type Logger :: (Type -> Type) -> Type
-newtype Logger d = Logger {log :: String -> d ()} deriving Generic
+newtype Logger d = Logger {log :: String -> d ()} deriving (Generic)
+
 instance FunctorB Logger
+
 instance Dep Logger where
-    type DefaultFieldName Logger = "logger"
+  type DefaultFieldName Logger = "logger"
 
 type Repository :: (Type -> Type) -> Type
 data Repository d = Repository
   { select :: String -> d [Int],
     insert :: [Int] -> d ()
-  } deriving Generic
+  }
+  deriving (Generic)
+
 instance FunctorB Repository
+
 instance Dep Repository where
-    type DefaultFieldName Repository = "repository"
+  type DefaultFieldName Repository = "repository"
 
 type Controller :: (Type -> Type) -> Type
-newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
+newtype Controller d = Controller {serve :: Int -> d String} deriving (Generic)
+
 instance FunctorB Controller
+
 instance Dep Controller where
-    type DefaultFieldName Controller = "controller"
+  type DefaultFieldName Controller = "controller"
 
 type Env :: (Type -> Type) -> Type
 data Env m = Env
@@ -70,8 +77,11 @@ data Env m = Env
     repository :: Repository m,
     controller :: Controller m
   }
+
 instance Has Logger m (Env m)
+
 instance Has Repository m (Env m)
+
 instance Has Controller m (Env m)
 
 -- dumb wrapper newtype
@@ -81,17 +91,14 @@ env :: Env (DepT Env (Writer ()))
 env =
   let logger = Logger \_ -> pure ()
       repository =
-        adviseRecord @Top @Top mempty $ 
-        deceiveRecord Wraps $
-        Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+        adviseRecord @Top @Top mempty $
+          deceiveRecord Wraps $
+            Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
-        adviseRecord @Top @Top mempty $ 
-        deceiveRecord Wraps $ 
-        Controller \_ -> pure "view"
+        adviseRecord @Top @Top mempty $
+          deceiveRecord Wraps $
+            Controller \_ -> pure "view"
    in Env {logger, repository, controller}
-
-
-
 
 ran :: Writer () String
 ran = runFromDep (pure env) serve 7
@@ -103,13 +110,24 @@ data EnvHKD h m = EnvHKD
   { logger :: h (Logger m),
     repository :: h (Repository m),
     controller :: h (Controller m)
-  } deriving Generic 
+  }
+  deriving (Generic)
+
 instance Functor h => FunctorB (EnvHKD h)
+
 instance FunctorT EnvHKD
+
 instance TraversableT EnvHKD
+
 instance Has Logger m (EnvHKD I m)
+
 instance Has Repository m (EnvHKD I m)
+
 instance Has Controller m (EnvHKD I m)
+
+instance Has Repository m (EnvHKD Identity m)
+
+instance Has Controller m (EnvHKD Identity m)
 
 envHKD :: EnvHKD I (DepT Env (Writer ()))
 envHKD =
@@ -117,14 +135,14 @@ envHKD =
         I $ Logger \_ -> pure ()
       repository =
         I $
-          adviseRecord @Top @Top mempty $ 
-          deceiveRecord Wraps $
-          Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+          adviseRecord @Top @Top mempty $
+            deceiveRecord Wraps $
+              Repository {select = \_ -> pure [], insert = \_ -> pure ()}
       controller =
         I $
-          adviseRecord @Top @Top mempty $ 
-          deceiveRecord Wraps $
-          Controller \_ -> pure "view"
+          adviseRecord @Top @Top mempty $
+            deceiveRecord Wraps $
+              Controller \_ -> pure "view"
    in adviseRecord @Top @Top mempty $ EnvHKD {logger, repository, controller}
 
 -- modified as a whole
@@ -138,9 +156,40 @@ envHKD' =
       controller =
         I $
           Controller \_ -> pure "view"
-   in adviseRecord @Top @Top mempty $ 
-      deceiveRecord Wraps $
-      EnvHKD {logger, repository, controller}
+   in adviseRecord @Top @Top mempty $
+        deceiveRecord Wraps $
+          EnvHKD {logger, repository, controller}
+
+envHKDIdentity :: EnvHKD Identity (DepT Env (Writer ()))
+envHKDIdentity =
+  let logger =
+        Identity $ Logger \_ -> pure ()
+      repository =
+        Identity $
+          adviseRecord @Top @Top mempty $
+            deceiveRecord Wraps $
+              Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+      controller =
+        Identity $
+          adviseRecord @Top @Top mempty $
+            deceiveRecord Wraps $
+              Controller \_ -> pure "view"
+   in adviseRecord @Top @Top mempty $ EnvHKD {logger, repository, controller}
+
+-- modified as a whole
+envHKDIdentity' :: EnvHKD Identity (DepT Env (Writer ()))
+envHKDIdentity' =
+  let logger =
+        Identity $ Logger \_ -> pure ()
+      repository =
+        Identity $
+          Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+      controller =
+        Identity $
+          Controller \_ -> pure "view"
+   in adviseRecord @Top @Top mempty $
+        deceiveRecord Wraps $
+          EnvHKD {logger, repository, controller}
 
 --
 --
