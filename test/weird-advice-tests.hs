@@ -39,11 +39,13 @@ import Rank2.TH qualified
 import Test.Tasty
 import Test.Tasty.HUnit
 import Prelude hiding (log)
+import Barbies
 
 -- https://stackoverflow.com/questions/53498707/cant-derive-generic-for-this-type/53499091#53499091
 -- There are indeed some higher kinded types for which GHC can currently derive Generic1 instances, but the feature is so limited it's hardly worth mentioning. This is mostly an artifact of taking the original implementation of Generic1 intended for * -> * (which already has serious limitations), turning on PolyKinds, and keeping whatever sticks, which is not much.
 type Logger :: (Type -> Type) -> Type
 newtype Logger d = Logger {log :: String -> d ()} deriving Generic
+instance FunctorB Logger
 instance Dep Logger where
     type DefaultFieldName Logger = "logger"
 
@@ -52,11 +54,13 @@ data Repository d = Repository
   { select :: String -> d [Int],
     insert :: [Int] -> d ()
   } deriving Generic
+instance FunctorB Repository
 instance Dep Repository where
     type DefaultFieldName Repository = "repository"
 
 type Controller :: (Type -> Type) -> Type
 newtype Controller d = Controller {serve :: Int -> d String} deriving Generic
+instance FunctorB Controller
 instance Dep Controller where
     type DefaultFieldName Controller = "controller"
 
@@ -99,7 +103,13 @@ data EnvHKD h m = EnvHKD
   { logger :: h (Logger m),
     repository :: h (Repository m),
     controller :: h (Controller m)
-  } deriving Generic
+  } deriving Generic 
+instance Functor h => FunctorB (EnvHKD h)
+instance FunctorT EnvHKD
+instance TraversableT EnvHKD
+instance Has Logger m (EnvHKD I m)
+instance Has Repository m (EnvHKD I m)
+instance Has Controller m (EnvHKD I m)
 
 envHKD :: EnvHKD I (DepT Env (Writer ()))
 envHKD =
@@ -117,7 +127,7 @@ envHKD =
           Controller \_ -> pure "view"
    in adviseRecord @Top @Top mempty $ EnvHKD {logger, repository, controller}
 
-
+-- modified as a whole
 envHKD' :: EnvHKD I (DepT Env (Writer ()))
 envHKD' =
   let logger =
@@ -131,7 +141,6 @@ envHKD' =
    in adviseRecord @Top @Top mempty $ 
       deceiveRecord Wraps $
       EnvHKD {logger, repository, controller}
-
 
 --
 --
