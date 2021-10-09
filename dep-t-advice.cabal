@@ -1,7 +1,7 @@
 cabal-version:       3.0
 
 name:                dep-t-advice
-version:             0.4.6.0
+version:             0.4.6.1
 synopsis:            Giving good advice to functions in a DepT environment.
 description:         Companion to the dep-t package. Easily add behaviour to functions living in a DepT environment, 
                      whatever the number of arguments they might have.
@@ -71,7 +71,7 @@ test-suite doctests
   hs-source-dirs:      test
   main-is:             doctests.hs
   build-depends:       
-                       doctest            ^>= 0.17 
+                       doctest            ^>= 0.18 
                        
  -- https://cabal.readthedocs.io/en/3.4/cabal-package.html#benchmarks
 benchmark benchmark

@@ -1,5 +1,9 @@
 # Revision history for dep-t-advice
 
+## 0.4.6.1 
+
+* Modified a signature to make it compile with GHC 9.0.1.
+
 ## 0.4.6.0 
 
 * `adviseRecord` and `deceiveRecord` now work with records having fields wrapped in `Identity`.

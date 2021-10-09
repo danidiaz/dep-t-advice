@@ -864,7 +864,7 @@ adviseRecord ::
   forall ca cr e_ m advised.
   AdvisedRecord ca e_ m cr advised =>
   -- | The advice to apply.
-  (forall r f. (cr r, Foldable f) => f (TypeRep, String) -> Advice ca e_ m r) ->
+  (forall r . cr r => [(TypeRep, String)] -> Advice ca e_ m r) ->
   -- | The record to advise recursively.
   advised (DepT e_ m) ->
   -- | The advised record.
