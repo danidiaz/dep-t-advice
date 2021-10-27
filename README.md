@@ -118,6 +118,43 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
+## Historical aside
+
+According to Wikipedia, the term "advice" in the sense of aspect-oriented
+programming goes back to 1966. Quoting from [PILOT: A Step Toward Man-Computer
+Symbiosis](http://publications.csail.mit.edu/ai/browse/0200browse.shtml):
+
+> There are two ways a user can modify programs in this subjective model of
+> programming: he can modify the interface between procedures, or he can modify
+> the procedure itself. (Since procedures are themselves made up of procedures,
+> modifying a procedure at one level may correspond to modifying the interface
+> between procedures at a lower level.) Modifying the interface between
+> procedures is called advising. Modifying a procedure itself is editing.
+
+> Advising is the basic innovation in the model, and in the PILOT system.
+> Advising consists of inserting new procedures at any or all of the entry or
+> exit points to a particular procedure (or class of procedures). The
+> procedures inserted are called "advice procedures" or simply "advice".
+
+> Since each piece of advice is itself a procedure, it has its own entries and
+> exits. In particular, this means that the execution of advice can cause the
+> procedure that it modifies to be bypassed completely, e.g., by specifying as
+> an exit from the advice one of the exits from the original procedure; or the
+> advice may change essential variables and continue with the computation so
+> that the original procedure is executed, but with modified variables.
+> Finally, the advice may not alter the execution or affect the original
+> procedure at all, e.g., it may merely perform some additional computation
+> such as printing a message or recording history. Since advice can be
+> conditional, the decision as to what is to be done can depend on the results
+> of the computation up to that point.
+
+> The principal advantage of advising is that the user need not be concerned
+> about the details of the actual changes in his program, nor the internal
+> representation of advice. He can treat the procedure to be advised *as a
+> unit*, a single block, and make changes to it without concern for the
+> particulars of this block. This may be contrasted with editing in which the
+> programmer must be cognizant of the internal structure of the procedure.
+
 ## Links
 
 - [Aspect Oriented Programming with
@@ -139,4 +176,7 @@ the full gamut of functionality stored in the environment.
 
 - [Inferring the arity of zipWith, with lots of type-level hackery](https://www.youtube.com/watch?v=iGSKqcebhfs&t=957s). YouTube video.
 
+- [Functional Pearl: The Decorator Pattern in Haskell](https://twitter.com/DiazCarrete/status/1403985337513394178)
+
+  > An arity-generic decorator needs to solve two problems: intercept recursive calls and handle functions of any arity uniformly
 
