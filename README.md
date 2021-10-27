@@ -155,6 +155,8 @@ Symbiosis](http://publications.csail.mit.edu/ai/browse/0200browse.shtml):
 > particulars of this block. This may be contrasted with editing in which the
 > programmer must be cognizant of the internal structure of the procedure.
 
+[tweet](https://twitter.com/DiazCarrete/status/1446783366678949891).
+
 ## Links
 
 - [Aspect Oriented Programming with
