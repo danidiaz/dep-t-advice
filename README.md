@@ -132,4 +132,11 @@ the full gamut of functionality stored in the environment.
   Patterns](https://www.goodreads.com/book/show/44416307-dependency-injection-principles-practices-and-patterns)
   This is a good book on the general princples of DI. 
 
+- [variadic-function](https://hackage.haskell.org/package/variadic-function) a
+  Hackage library which also deals with functions of any number of elements.
+  [Reddit
+  thread](https://www.reddit.com/r/haskell/comments/oeyaz2/ann_typeablemock_mocks_that_can_fit_into_any/).
+
+- [Inferring the arity of zipWith, with lots of type-level hackery](https://www.youtube.com/watch?v=iGSKqcebhfs&t=957s). YouTube video.
+
 
