@@ -108,7 +108,7 @@ import Control.Monad.Zip
 -- >>> import GHC.Generics (Generic)
 -- >>> import GHC.Generics qualified
 
--- | A generic transformation of 'DepT'-effectful functions with environment
+-- | A generic transformation of 'AspectT'-effectful functions with environment
 -- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
 -- provided the functions satisfy certain constraint @ca@ of kind @Type ->
 -- Constraint@ on all of their arguments.
@@ -125,24 +125,23 @@ import Control.Monad.Zip
 -- See "Control.Monad.Dep.Advice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
-  ((Type -> Type) -> Type) ->
   (Type -> Type) ->
   Type ->
   Type
-data Advice ca e_ m r where
+data Advice ca m r where
   Advice ::
-    forall u ca e_ m r.
+    forall u ca m r.
     Proxy u ->
     ( forall as.
       All ca as =>
       NP I as ->
-      DepT e_ m (u, NP I as)
+      AspectT m (u, NP I as)
     ) ->
     ( u ->
-      DepT e_ m r ->
-      DepT e_ m r
+      AspectT m r ->
+      AspectT m r
     ) ->
-    Advice ca e_ m r
+    Advice ca m r
 
 type AspectT ::
   (Type -> Type) ->
@@ -172,35 +171,35 @@ deriving newtype instance MonadError e m => MonadError e (AspectT m)
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
---    \"concentrically\" when tweaking the final 'DepT' action.
+--    \"concentrically\" when tweaking the final 'AspectT' action.
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
-instance Monad m => Semigroup (Advice ca e_ m r) where
+instance Monad m => Semigroup (Advice ca m r) where
   Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
     let captureExistentials ::
-          forall ca e_ r outer inner.
+          forall ca r outer inner.
           Proxy outer ->
           ( forall as.
             All ca as =>
             NP I as ->
-            DepT e_ m (outer, NP I as)
+            AspectT m (outer, NP I as)
           ) ->
           ( outer ->
-            DepT e_ m r ->
-            DepT e_ m r
+            AspectT m r ->
+            AspectT m r
           ) ->
           Proxy inner ->
           ( forall as.
             All ca as =>
             NP I as ->
-            DepT e_ m (inner, NP I as)
+            AspectT m (inner, NP I as)
           ) ->
           ( inner ->
-            DepT e_ m r ->
-            DepT e_ m r
+            AspectT m r ->
+            AspectT m r
           ) ->
-          Advice ca e_ m r
+          Advice ca m r
         captureExistentials _ tweakArgsOuter' tweakExecutionOuter' _ tweakArgsInner' tweakExecutionInner' =
           Advice
             (Proxy @(Pair outer inner))
@@ -208,7 +207,7 @@ instance Monad m => Semigroup (Advice ca e_ m r) where
                     forall as.
                     All ca as =>
                     NP I as ->
-                    DepT e_ m (Pair outer inner, NP I as)
+                    AspectT m (Pair outer inner, NP I as)
                   tweakArgs args =
                     do
                       (uOuter, argsOuter) <- tweakArgsOuter' @as args
@@ -218,17 +217,17 @@ instance Monad m => Semigroup (Advice ca e_ m r) where
             )
             ( let tweakExecution ::
                     Pair outer inner ->
-                    DepT e_ m r ->
-                    DepT e_ m r
+                    AspectT m r ->
+                    AspectT m r
                   tweakExecution =
                     ( \(Pair uOuter uInner) action ->
                         tweakExecutionOuter' uOuter (tweakExecutionInner' uInner action)
                     )
                in tweakExecution
             )
-     in captureExistentials @ca @e_ outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+     in captureExistentials @ca outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
 
-instance Monad m => Monoid (Advice ca e_ m r) where
+instance Monad m => Monoid (Advice ca m r) where
   mappend = (<>)
   mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
 
@@ -255,19 +254,19 @@ instance Monad m => Monoid (Advice ca e_ m r) where
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
 makeAdvice ::
-  forall u ca e_ m r.
+  forall u ca m r.
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e_ m (u, NP I as)
+    AspectT m (u, NP I as)
   ) ->
   -- | The function that tweaks the execution.
   ( u ->
-    DepT e_ m r ->
-    DepT e_ m r
+    AspectT m r ->
+    AspectT m r
   ) ->
-  Advice ca e_ m r
+  Advice ca m r
 makeAdvice = Advice (Proxy @u)
 
 -- |
@@ -280,15 +279,15 @@ makeAdvice = Advice (Proxy @u)
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
-  forall ca e_ m r.
+  forall ca m r.
   Monad m =>
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e_ m (NP I as)
+    AspectT m (NP I as)
   ) ->
-  Advice ca e_ m r
+  Advice ca m r
 makeArgsAdvice tweakArgs =
   makeAdvice @()
     ( \args -> do
@@ -307,22 +306,22 @@ makeArgsAdvice tweakArgs =
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
-  forall ca e_ m r.
+  forall ca m r.
   Applicative m =>
   -- | The function that tweaks the execution.
-  ( DepT e_ m r ->
-    DepT e_ m r
+  ( AspectT m r ->
+    AspectT m r
   ) ->
-  Advice ca e_ m r
+  Advice ca m r
 makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
 
 data Pair a b = Pair !a !b
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
--- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
+-- effects in 'AspectT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
---  foo :: Int -> DepT NilEnv IO String
+--  foo :: Int -> AspectT NilEnv IO String
 --  foo _ = pure "foo"
 --  advisedFoo = advise (printArgs stdout "Foo args: ") foo
 -- :}
@@ -331,52 +330,43 @@ data Pair a b = Pair !a !b
 -- it must be supplied by means of a type application:
 --
 -- >>> :{
---  bar :: Int -> DepT NilEnv IO String
+--  bar :: Int -> AspectT NilEnv IO String
 --  bar _ = pure "bar"
 --  advisedBar1 = advise (returnMempty @Top) bar
 --  advisedBar2 = advise @Top returnMempty bar
 -- :}
 advise ::
-  forall ca e_ m r as advisee.
-  (Multicurryable as e_ m r advisee, All ca as, Monad m) =>
+  forall ca m r as advisee.
+  (Multicurryable as m r advisee, All ca as, Monad m) =>
   -- | The advice to apply.
-  Advice ca e_ m r ->
+  Advice ca m r ->
   -- | A function to be adviced.
   advisee ->
   advisee
 advise (Advice _ tweakArgs tweakExecution) advisee = do
-  let uncurried = multiuncurry @as @e_ @m @r advisee
+  let uncurried = multiuncurry @as @m @r advisee
       uncurried' args = do
         (u, args') <- tweakArgs args
         tweakExecution u (uncurried args')
-   in multicurry @as @e_ @m @r uncurried'
+   in multicurry @as @m @r uncurried'
 
 type Multicurryable ::
   [Type] ->
-  ((Type -> Type) -> Type) ->
   (Type -> Type) ->
   Type ->
   Type ->
   Constraint
-class Multicurryable as e_ m r curried | curried -> as e_ m r where
-  type DownToBaseMonad as e_ m r curried :: Type
-  multiuncurry :: curried -> NP I as -> DepT e_ m r
-  multicurry :: (NP I as -> DepT e_ m r) -> curried
-  _runFromEnv :: m (e_ (DepT e_ m)) -> (e_ (DepT e_ m) -> curried) -> DownToBaseMonad as e_ m r curried
+class Multicurryable as m r curried | curried -> as m r where
+  multiuncurry :: curried -> NP I as -> AspectT m r
+  multicurry :: (NP I as -> AspectT m r) -> curried
 
-instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
-  type DownToBaseMonad '[] e_ m r (DepT e_ m r) = m r
+instance Monad m => Multicurryable '[] m r (AspectT m r) where
   multiuncurry action Nil = action
   multicurry f = f Nil
-  _runFromEnv producer extractor = do
-    e <- producer
-    runDepT (extractor e) e
 
-instance Multicurryable as e_ m r curried => Multicurryable (a ': as) e_ m r (a -> curried) where
-  type DownToBaseMonad (a ': as) e_ m r (a -> curried) = a -> DownToBaseMonad as e_ m r curried
-  multiuncurry f (I a :* as) = multiuncurry @as @e_ @m @r @curried (f a) as
-  multicurry f a = multicurry @as @e_ @m @r @curried (f . (:*) (I a))
-  _runFromEnv producer extractor a = _runFromEnv @as @e_ @m @r @curried producer (\f -> extractor f a)
+instance Multicurryable as m r curried => Multicurryable (a ': as) m r (a -> curried) where
+  multiuncurry f (I a :* as) = multiuncurry @as @m @r @curried (f a) as
+  multicurry f a = multicurry @as @m @r @curried (f . (:*) (I a))
 
 -- $restrict
 --
@@ -408,13 +398,13 @@ instance Multicurryable as e_ m r curried => Multicurryable (a ': as) e_ m r (a 
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
-  forall more less e_ m r.
+  forall more less m r.
   -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
   (forall x. Dict more x -> Dict less x) ->
   -- | Advice with less restrictive constraint on the args.
-  Advice less e_ m r ->
+  Advice less m r ->
   -- | Advice with more restrictive constraint on the args.
-  Advice more e_ m r
+  Advice more m r
 -- about the order of the type parameters... which is more useful?
 -- A possible principle to follow:
 -- We are likely to know the "less" constraint, because advices are likely to
@@ -425,23 +415,23 @@ restrictArgs ::
 -- type signature.  This seems to favor putting "more" first.
 restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
   let captureExistential ::
-        forall more less e_ m r u.
+        forall more less m r u.
         (forall x. Dict more x -> Dict less x) ->
         Proxy u ->
         ( forall as.
           All less as =>
           NP I as ->
-          DepT e_ m (u, NP I as)
+          AspectT m (u, NP I as)
         ) ->
         ( u ->
-          DepT e_ m r ->
-          DepT e_ m r
+          AspectT m r ->
+          AspectT m r
         ) ->
-        Advice more e_ m r
+        Advice more m r
       captureExistential evidence' _ tweakArgs' tweakExecution' =
         Advice
           (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e_ m (u, NP I as)
+          ( let tweakArgs'' :: forall as. All more as => NP I as -> AspectT m (u, NP I as)
                 tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
                   f -> case f (Dict @(All more) @as) of
                     Dict -> \args -> tweakArgs' @as args
@@ -454,35 +444,35 @@ restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
 -- advising *all* fields of a record
 --
 --
-type AdvisedRecord :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
-class AdvisedRecord ca e_ m cr advised where
-  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
+type AdvisedRecord :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
+class AdvisedRecord ca m cr advised where
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised (AspectT m) -> advised (AspectT m)
 
-type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
-class AdvisedProduct ca e_ m cr advised_ where
-  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
+type AdvisedProduct :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
+class AdvisedProduct ca m cr advised_ where
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised_ k -> advised_ k
 
 instance
-  ( G.Generic (advised (DepT e_ m)),
-    -- G.Rep (advised (DepT e_ m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
-    G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+  ( G.Generic (advised (AspectT m)),
+    -- G.Rep (advised (AspectT m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
+    G.Rep (advised (AspectT m)) ~ G.D1 x (G.C1 y advised_),
     Typeable advised,
-    AdvisedProduct ca e_ m cr advised_
+    AdvisedProduct ca m cr advised_
   ) =>
-  AdvisedRecord ca e_ m cr advised
+  AdvisedRecord ca m cr advised
   where
   _adviseRecord acc f unadvised =
     let G.M1 (G.M1 unadvised_) = G.from unadvised
-        advised_ = _adviseProduct @_ @ca @e_ @m @cr (typeRep (Proxy @advised)) acc f unadvised_
+        advised_ = _adviseProduct @_ @ca @m @cr (typeRep (Proxy @advised)) acc f unadvised_
      in G.to (G.M1 (G.M1 advised_))
 
 instance
-  ( AdvisedProduct ca e_ m cr advised_left,
-    AdvisedProduct ca e_ m cr advised_right
+  ( AdvisedProduct ca m cr advised_left,
+    AdvisedProduct ca m cr advised_right
   ) =>
-  AdvisedProduct ca e_ m cr (advised_left G.:*: advised_right)
+  AdvisedProduct ca m cr (advised_left G.:*: advised_right)
   where
-  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e_ @m @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @e_ @m @cr tr acc f unadvised_right
+  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @m @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @m @cr tr acc f unadvised_right
 
 data RecordComponent
   = Terminal
@@ -492,48 +482,48 @@ data RecordComponent
 type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
   DiscriminateAdvisedComponent (a -> b) = Terminal
-  DiscriminateAdvisedComponent (DepT e_ m x) = Terminal
+  DiscriminateAdvisedComponent (AspectT m x) = Terminal
   DiscriminateAdvisedComponent (Identity _) = IWrapped
   DiscriminateAdvisedComponent (I _) = IWrapped
   DiscriminateAdvisedComponent _ = Recurse
 
-type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
-class AdvisedComponent component_type ca e_ m cr advised where
-  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
+type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
+class AdvisedComponent component_type ca m cr advised where
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised -> advised
 
 instance
-  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
+  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised,
     KnownSymbol fieldName
   ) =>
-  AdvisedProduct ca e_ m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
+  AdvisedProduct ca m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
   where
   _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
     let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
-     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc' f advised))
+     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc' f advised))
 
 instance
-  AdvisedRecord ca e_ m cr advisable =>
-  AdvisedComponent Recurse ca e_ m cr (advisable (DepT e_ m))
+  AdvisedRecord ca m cr advisable =>
+  AdvisedComponent Recurse ca m cr (advisable (AspectT m))
   where
-  _adviseComponent acc f advised = _adviseRecord @ca @e_ @m @cr acc f advised
+  _adviseComponent acc f advised = _adviseRecord @ca @m @cr acc f advised
 
 instance
-  (Multicurryable as e_ m r advised, All ca as, cr r, Monad m) =>
-  AdvisedComponent Terminal ca e_ m cr advised
+  (Multicurryable as m r advised, All ca as, cr r, Monad m) =>
+  AdvisedComponent Terminal ca m cr advised
   where
-  _adviseComponent acc f advised = advise @ca @e_ @m (f acc) advised
+  _adviseComponent acc f advised = advise @ca @m (f acc) advised
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
-  AdvisedComponent IWrapped ca e_ m cr (Identity advised)
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised =>
+  AdvisedComponent IWrapped ca m cr (Identity advised)
   where
-  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
+  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc f advised)
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
-  AdvisedComponent IWrapped ca e_ m cr (I advised)
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised =>
+  AdvisedComponent IWrapped ca m cr (I advised)
   where
-  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
+  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc f advised)
 
 -- | Gives 'Advice' to all the functions in a record-of-functions.
 --
@@ -547,15 +537,15 @@ instance
 -- and the @cr@ constraint on the result type must be supplied by means of a
 -- type application. Supply 'Top' if no constraint is required.
 adviseRecord ::
-  forall ca cr e_ m advised.
-  AdvisedRecord ca e_ m cr advised =>
+  forall ca cr m advised.
+  AdvisedRecord ca m cr advised =>
   -- | The advice to apply.
-  (forall r . cr r => [(TypeRep, String)] -> Advice ca e_ m r) ->
+  (forall r . cr r => [(TypeRep, String)] -> Advice ca m r) ->
   -- | The record to advise recursively.
-  advised (DepT e_ m) ->
+  advised (AspectT m) ->
   -- | The advised record.
-  advised (DepT e_ m)
-adviseRecord = _adviseRecord @ca @e_ @m @cr []
+  advised (AspectT m)
+adviseRecord = _adviseRecord @ca @m @cr []
 
 -- $sop
 -- Some useful definitions re-exported the from \"sop-core\" package.
@@ -588,6 +578,6 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 -- arguments inside an 'Advice'.
 
 -- $invocation
--- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
+-- These functions are helpers for running 'AspectT' computations, beyond what 'runAspectT' provides.
 --
 -- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
