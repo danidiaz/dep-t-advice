@@ -32,6 +32,7 @@ module Control.Monad.Dep.SimpleAdvice
 
     -- * Applying Advices
     advise,
+    advising,
 
     -- * Harmonizing Advice argument constraints
     -- $restrict
@@ -348,6 +349,12 @@ advise (Advice _ tweakArgs tweakExecution) advisee = do
         (u, args') <- tweakArgs args
         tweakExecution u (uncurried args')
    in multicurry @as @m @r uncurried'
+
+advising 
+    :: Coercible (r_ m) (r_ (AspectT m))
+    => (r_ (AspectT m) -> r_ (AspectT m))
+    -> r_ m -> r_ m
+advising f = coerce . f . coerce
 
 type Multicurryable ::
   [Type] ->
