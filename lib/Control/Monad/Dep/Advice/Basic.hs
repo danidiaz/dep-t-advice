@@ -10,7 +10,7 @@
 
 
 -- |
--- This module contains examples of simple advices.
+-- This module contains basic examples advices.
 --
 -- __/BEWARE!/__ These are provided for illustrative purposes only, they
 -- strive for simplicity and not robustness or efficiency.

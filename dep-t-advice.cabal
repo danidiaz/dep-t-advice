@@ -25,6 +25,8 @@ common common
                        sop-core ^>= 0.5.0.0,
                        transformers ^>= 0.5.0.0,
                        dep-t ^>= 0.4.4.0,
+                       mtl ^>= 2.2,
+                       unliftio-core ^>= 0.2.0.0,
   default-language:    Haskell2010
 
 common common-tests
@@ -32,8 +34,8 @@ common common-tests
   build-depends:       
                        dep-t-advice, 
                        rank2classes       ^>= 1.4.1,
-                       transformers       ^>= 0.5.0.0,
-                       mtl                ^>= 2.2,
+                       -- transformers       ^>= 0.5.0.0,
+                       -- mtl                ^>= 2.2,
                        template-haskell,
 
 
@@ -46,7 +48,8 @@ common common-tasty
 
 library
   import: common
-  exposed-modules:     Control.Monad.Dep.Advice
+  exposed-modules:     Control.Monad.Dep.SimpleAdvice
+                       Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advice.Basic
   hs-source-dirs:      lib 
 
