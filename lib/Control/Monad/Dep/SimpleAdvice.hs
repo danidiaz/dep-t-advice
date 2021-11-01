@@ -53,9 +53,10 @@ module Control.Monad.Dep.SimpleAdvice
   )
 where
 
-import Control.Monad.Dep
+import Data.Coerce
+import Control.Monad
+import Control.Monad.Fix
 import Control.Monad.Dep.Has
-import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Functor.Identity
 import Data.Kind
 import Data.List.NonEmpty qualified as N
@@ -69,8 +70,6 @@ import Control.Applicative
 import Control.Monad.Cont.Class
 import Control.Monad.Error.Class
 import Control.Monad.IO.Unlift
-import Control.Monad.Reader
-import Control.Monad.Reader.Class
 import Control.Monad.State.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Identity
