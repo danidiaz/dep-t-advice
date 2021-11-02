@@ -102,16 +102,15 @@ makeController (asCall -> call) = Controller {
 
 -- from purely Has-using to MonadDep-using
 -- this is very verbose, how to automate it?
-makeController'' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
-makeController'' = Controller {
-        create = askFinalDepT $ fmap create makeController
-      , append = askFinalDepT $ fmap append makeController
-      , inspect = askFinalDepT $ fmap inspect makeController
-    }
+-- makeController'' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
+-- makeController'' = Controller {
+--         create = askFinalDepT $ fmap create makeController
+--       , append = askFinalDepT $ fmap append makeController
+--       , inspect = askFinalDepT $ fmap inspect makeController
+--     }
 
 makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
-makeController''' =
-    strangeFixRecord makeController
+makeController''' = askForEnv makeController
 
 
 tests :: TestTree

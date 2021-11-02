@@ -93,7 +93,7 @@ module Control.Monad.Dep.Advice
     runFinalDepT,
     runFromEnv,
     runFromDep,
-    askFinalDepT,
+    -- askFinalDepT,
     -- * Making functions see a different environment
     deceive,
 
@@ -101,7 +101,7 @@ module Control.Monad.Dep.Advice
     -- $records
     adviseRecord,
     deceiveRecord,
-    strangeFixRecord,
+    askForEnv,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -783,50 +783,62 @@ deceiveRecord ::
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
 
--- strange fix
+-- | Given a constructor that returns a component parameterized with 'DepT',
+-- get hold of the environment by 'ask'ing for it in the 'DepT' actions
+-- themselves. We are already working with reader-like monad, after all, so
+-- there's no need to pass the environment as a positional parameter!
+--
+-- You must have a sufficiently polymorphic constructor—both in the monad and
+-- in the environment—to invoke this function.
+--
+-- 'askForEnv' lets you plug simple component constructors written without
+-- 'MonadDep' or 'MonadReader' constraints (merely 'Has' ones) into a
+-- 'DepT'-based environment.
+askForEnv 
+    :: forall e_ m record .  AskingRecord e_ m record
+    -- | constructor which takes the environment as a positional parameter.
+    => (e_ (DepT e_ m) -> record (DepT e_ m)) 
+    -- | component whose methods get the environment by 'ask'ing.
+    -> record (DepT e_ m)
+askForEnv = _askForEnv @e_ @m
 
-strangeFixRecord 
-    :: forall e_ m record .  StrangeFixRecord e_ m record
-    => (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
-strangeFixRecord = _strangeFixRecord @e_ @m
+type AskingRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class AskingRecord e_ m record where
+    _askForEnv :: (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
 
-type StrangeFixRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
-class StrangeFixRecord e_ m record where
-    _strangeFixRecord :: (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
-
-type StrangeFixProduct :: ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
-class StrangeFixProduct e_ m product where
-    _strangeFixProduct :: (e_ (DepT e_ m) -> product k) -> product k
+type AskingProduct :: ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
+class AskingProduct e_ m product where
+    _askForEnvProduct :: (e_ (DepT e_ m) -> product k) -> product k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
     G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
-    StrangeFixProduct e_ m advised_
+    AskingProduct e_ m advised_
   ) =>
-  StrangeFixRecord e_ m advised
+  AskingRecord e_ m advised
   where
-  _strangeFixRecord f =
-    let advised_ = _strangeFixProduct @_ @e_ @m (fmap (G.unM1 . G.unM1 . G.from) f)
+  _askForEnv f =
+    let advised_ = _askForEnvProduct @_ @e_ @m (fmap (G.unM1 . G.unM1 . G.from) f)
      in G.to (G.M1 (G.M1 advised_))
 
 instance
-  ( StrangeFixProduct e_ m advised_left,
-    StrangeFixProduct e_ m advised_right
+  ( AskingProduct e_ m advised_left,
+    AskingProduct e_ m advised_right
   ) =>
-  StrangeFixProduct e_ m (advised_left G.:*: advised_right)
+  AskingProduct e_ m (advised_left G.:*: advised_right)
   where
-  _strangeFixProduct f  = 
-      _strangeFixProduct @_ @e_ @m (fmap (\(l G.:*: _) -> l) f) 
+  _askForEnvProduct f  = 
+      _askForEnvProduct @_ @e_ @m (fmap (\(l G.:*: _) -> l) f) 
       G.:*: 
-      _strangeFixProduct @_ @e_ @m (fmap (\(_ G.:*: r) -> r) f) 
+      _askForEnvProduct @_ @e_ @m (fmap (\(_ G.:*: r) -> r) f) 
 
 instance
   ( 
     Multicurryable as e_ m r advised
   ) =>
-  StrangeFixProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
+  AskingProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
   where
-  _strangeFixProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (G.unK1 . G.unM1 . f)
+  _askForEnvProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (G.unK1 . G.unM1 . f)
 
 
 -- advising *all* fields of a record
