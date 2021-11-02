@@ -782,7 +782,35 @@ deceiveRecord ::
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
 
+type StrangeFixRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class StrangeFixRecord e_ m record where
+    _strangeFixRecord :: (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
 
+type StrangeFixProduct :: ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
+class StrangeFixProduct e_ m product where
+    _strangeFixProduct :: (e_ (DepT e_ m) -> product k) -> product k
+
+instance
+  ( G.Generic (advised (DepT e_ m)),
+    G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+    StrangeFixProduct e_ m advised_
+  ) =>
+  StrangeFixRecord e_ m advised
+  where
+  _strangeFixRecord f =
+    let advised_ = _strangeFixProduct @_ @e_ @m (fmap (G.unM1 . G.unM1 . G.from) f)
+     in G.to (G.M1 (G.M1 advised_))
+
+instance
+  ( StrangeFixProduct e_ m advised_left,
+    StrangeFixProduct e_ m advised_right
+  ) =>
+  StrangeFixProduct e_ m (advised_left G.:*: advised_right)
+  where
+  _strangeFixProduct f  = 
+      _strangeFixProduct @_ @e_ @m (fmap (\(l G.:*: _) -> l) f) 
+      G.:*: 
+      _strangeFixProduct @_ @e_ @m (fmap (\(_ G.:*: r) -> r) f) 
 
 -- advising *all* fields of a record
 --
