@@ -93,7 +93,7 @@ module Control.Monad.Dep.Advice
     runFinalDepT,
     runFromEnv,
     runFromDep,
-
+    askFinalDepT,
     -- * Making functions see a different environment
     deceive,
 
@@ -419,7 +419,7 @@ class Multicurryable as e_ m r curried | curried -> as e_ m r where
   multiuncurry :: curried -> NP I as -> DepT e_ m r
   multicurry :: (NP I as -> DepT e_ m r) -> curried
   _runFromEnv :: m (e_ (DepT e_ m)) -> (e_ (DepT e_ m) -> curried) -> DownToBaseMonad as e_ m r curried
-  _askFinalDepT :: (e_ (DepT e_ m) -> DownToBaseMonad as e_ m r curried) -> curried
+  _askFinalDepT :: (e_ (DepT e_ m) -> curried) -> curried
 
 instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
   type DownToBaseMonad '[] e_ m r (DepT e_ m r) = m r
@@ -430,7 +430,7 @@ instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
     runDepT (extractor e) e
   _askFinalDepT f = do
     env <- ask
-    lift $ f env
+    f env
 
 instance Multicurryable as e_ m r curried => Multicurryable (a ': as) e_ m r (a -> curried) where
   type DownToBaseMonad (a ': as) e_ m r (a -> curried) = a -> DownToBaseMonad as e_ m r curried
@@ -458,6 +458,12 @@ runFinalDepT ::
   -- | a new function with effects in the base monad
   DownToBaseMonad as e_ m r curried
 runFinalDepT producer extractor = _runFromEnv producer (const extractor)
+
+askFinalDepT ::
+  forall as e_ m r curried. 
+  Multicurryable as e_ m r curried =>
+  (e_ (DepT e_ m) -> curried) -> curried
+askFinalDepT = _askFinalDepT @as @e_ @m @r
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
 -- and a function capable of extracting a curried function from the
@@ -774,6 +780,9 @@ deceiveRecord ::
   -- | The deceived record.
   gullible (DepT e_ m)
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
+
+
+
 
 -- advising *all* fields of a record
 --

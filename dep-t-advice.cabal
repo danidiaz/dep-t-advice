@@ -62,6 +62,11 @@ test-suite weird-advice-tests
   build-depends:       
                        barbies            ^>= 2.0.2.0
 
+test-suite tests-has-conversion
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             tests-has-conversion.hs
+
 -- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
 -- http://hackage.haskell.org/package/cabal-doctest
 test-suite doctests
