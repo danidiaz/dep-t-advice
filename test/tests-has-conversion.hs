@@ -41,7 +41,6 @@ import System.IO
 import Control.Exception
 import Control.Arrow (Kleisli (..))
 import Data.Text qualified as Text
-import Data.ByteString.Lazy qualified as Bytes
 import Data.Function ((&))
 import Data.Functor ((<&>), ($>))
 import Data.String
