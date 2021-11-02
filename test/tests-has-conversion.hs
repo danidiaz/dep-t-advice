@@ -37,6 +37,14 @@ import Prelude hiding (log)
 import Data.Proxy
 import System.IO
 import qualified GHC.Generics as G
+import System.IO
+import Control.Exception
+import Control.Arrow (Kleisli (..))
+import Data.Text qualified as Text
+import Data.ByteString.Lazy qualified as Bytes
+import Data.Function ((&))
+import Data.Functor ((<&>), ($>))
+import Data.String
 
 --
 --
@@ -59,27 +67,37 @@ data Controller d = Controller
   , inspect :: Int -> d (Maybe String)
   } deriving G.Generic
 
--- makeInMemoryRepository 
---     :: Has Logger IO env 
---     => IORef (Map Int String) 
---     -> env 
---     -> Repository IO
--- makeInMemoryRepository ref (asCall -> call) = do
---     Repository {
---          findById = \key -> do
---             call info "I'm going to do a lookup in the map!"
---             theMap <- readIORef ref
---             pure (Map.lookup key theMap)
---        , putById = \key content -> do
---             theMap <- readIORef ref
---             writeIORef ref $ Map.insert key content theMap 
---        , insert = \content -> do 
---             call info "I'm going to insert in the map!"
---             theMap <- readIORef ref
---             let next = Map.size theMap
---             writeIORef ref $ Map.insert next content theMap 
---             pure next
---     }
+type MessagePrefix = Text.Text
+
+data LoggerConfiguration = LoggerConfiguration { 
+        messagePrefix :: MessagePrefix
+    } deriving stock (Show, Generic)
+      deriving anyclass FromJSON
+
+makeStdoutLogger :: MonadIO m => MessagePrefix -> env -> Logger m
+makeStdoutLogger prefix _ = Logger (\msg -> liftIO (putStrLn (Text.unpack prefix ++ msg)))
+
+makeInMemoryRepository 
+    :: (Has Logger IO env, MonadIO m) 
+    => IORef (Map Int String) 
+    -> env 
+    -> Repository m
+makeInMemoryRepository ref (asCall -> call) = do
+    Repository {
+         findById = \key -> do
+            call info "I'm going to do a lookup in the map!"
+            theMap <- liftIO $ readIORef ref
+            pure (Map.lookup key theMap)
+       , putById = \key content -> do
+            theMap <- liftIO $ readIORef ref
+            liftIO $ writeIORef ref $ Map.insert key content theMap 
+       , insert = \content -> do 
+            call info "I'm going to insert in the map!"
+            theMap <- liftIO $ readIORef ref
+            let next = Map.size theMap
+            liftIO $ writeIORef ref $ Map.insert next content theMap 
+            pure next
+    }
 
 makeController :: forall m env . (Has Logger m env, Has Repository m env, Monad m) => env -> Controller m
 makeController (asCall -> call) = Controller {
@@ -112,6 +130,40 @@ makeController (asCall -> call) = Controller {
 makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
 makeController''' = askForEnv makeController
 
+type EnvHKD :: (Type -> Type) -> (Type -> Type) -> Type
+data EnvHKD h m = EnvHKD
+  { logger :: h (Logger m),
+    repository :: h (Repository m),
+    controller :: h (Controller m)
+  } deriving stock Generic
+    deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
+
+deriving via Autowired (EnvHKD Identity m) instance Autowireable r_ m (EnvHKD Identity m) => Has r_ m (EnvHKD Identity m)
+
+parseConf :: FromJSON a => Configurator a
+parseConf = Kleisli parseJSON
+
+type Configurator = Kleisli Parser Value 
+
+type Allocator = ContT () IO
+
+type Phases env_ m = Configurator `Compose` Allocator `Compose` DepT env_ m
+
+env :: EnvHKD (Phases EnvHKD IO) IO
+env = EnvHKD {
+      logger = 
+        parseConf `bindPhase` \(LoggerConfiguration {messagePrefix}) -> 
+        skipPhase @Allocator $
+        askForEnv (makeStdoutLogger messagePrefix)
+    , repository = 
+        skipPhase @Configurator $
+        allocateMap `bindPhase` \ref -> 
+        askForEnv (makeInMemoryRepository ref)
+    , controller = 
+        skipPhase @Configurator $
+        skipPhase @Allocator $ 
+        askForEnv makeController
+}
 
 tests :: TestTree
 tests =

@@ -35,7 +35,7 @@ common common-tests
                        transformers       ^>= 0.5.0.0,
                        mtl                ^>= 2.2,
                        template-haskell,
-
+                       text,
 
 common common-tasty
   import:              common-tests
@@ -67,16 +67,16 @@ test-suite tests-has-conversion
   type:                exitcode-stdio-1.0
   main-is:             tests-has-conversion.hs
 
--- -- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
--- -- http://hackage.haskell.org/package/cabal-doctest
--- test-suite doctests
---   import:              common-tests
---   ghc-options:         -threaded
---   type:                exitcode-stdio-1.0
---   hs-source-dirs:      test
---   main-is:             doctests.hs
---   build-depends:       
---                        doctest            ^>= 0.18 
+-- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
+-- http://hackage.haskell.org/package/cabal-doctest
+test-suite doctests
+  import:              common-tests
+  ghc-options:         -threaded
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             doctests.hs
+  build-depends:       
+                       doctest            ^>= 0.18 
                        
  -- https://cabal.readthedocs.io/en/3.4/cabal-package.html#benchmarks
 benchmark benchmark
