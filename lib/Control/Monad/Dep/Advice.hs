@@ -101,6 +101,7 @@ module Control.Monad.Dep.Advice
     -- $records
     adviseRecord,
     deceiveRecord,
+    strangeFixRecord,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -782,6 +783,13 @@ deceiveRecord ::
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
 
+-- strange fix
+
+strangeFixRecord 
+    :: forall e_ m record .  StrangeFixRecord e_ m record
+    => (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
+strangeFixRecord = _strangeFixRecord @e_ @m
+
 type StrangeFixRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
 class StrangeFixRecord e_ m record where
     _strangeFixRecord :: (e_ (DepT e_ m) -> record (DepT e_ m)) -> record (DepT e_ m)
@@ -811,6 +819,15 @@ instance
       _strangeFixProduct @_ @e_ @m (fmap (\(l G.:*: _) -> l) f) 
       G.:*: 
       _strangeFixProduct @_ @e_ @m (fmap (\(_ G.:*: r) -> r) f) 
+
+instance
+  ( 
+    Multicurryable as e_ m r advised
+  ) =>
+  StrangeFixProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
+  where
+  _strangeFixProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (G.unK1 . G.unM1 . f)
+
 
 -- advising *all* fields of a record
 --

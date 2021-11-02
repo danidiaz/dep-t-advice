@@ -15,6 +15,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ViewPatterns #-}
 
 module Main (main) where
@@ -35,6 +36,7 @@ import Test.Tasty.HUnit
 import Prelude hiding (log)
 import Data.Proxy
 import System.IO
+import qualified GHC.Generics as G
 
 --
 --
@@ -55,7 +57,7 @@ data Controller d = Controller
   { create :: d Int
   , append :: Int -> String -> d Bool 
   , inspect :: Int -> d (Maybe String)
-  } 
+  } deriving G.Generic
 
 -- makeInMemoryRepository 
 --     :: Has Logger IO env 
@@ -106,6 +108,11 @@ makeController'' = Controller {
       , append = askFinalDepT $ fmap append makeController
       , inspect = askFinalDepT $ fmap inspect makeController
     }
+
+makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
+makeController''' =
+    strangeFixRecord makeController
+
 
 tests :: TestTree
 tests =
