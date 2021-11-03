@@ -809,8 +809,8 @@ distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
 -- 'component' lets you plug simple component constructors 
 -- into a 'DepT'-based environment.
 --
--- Compare with 'Control.Monad.Dep.Env.constructor', which is 
--- intended to be used with 'Control.Monad.Dep.Env.fixEnv'-based environments.
+-- Compare with 'Control.Monad.Dep.Env.constructor' from "Control.Monad.Dep.Env", which 
+-- is intended to be used with 'Control.Monad.Dep.Env.fixEnv'-based environments.
 component 
     :: forall e_ m record . (Applicative m, DistributiveRecord e_ m record) => 
     -- | constructor which takes the environment as a positional parameter.
