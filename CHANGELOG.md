@@ -1,5 +1,9 @@
 # Revision history for dep-t-advice
 
+## 0.4.7.0 
+
+* Added 'distributeDepT' and 'component'.
+
 ## 0.4.6.1 
 
 * Modified a signature to make it compile with GHC 9.0.1.

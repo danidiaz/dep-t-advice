@@ -93,7 +93,7 @@ module Control.Monad.Dep.Advice
     runFinalDepT,
     runFromEnv,
     runFromDep,
-
+    -- askFinalDepT,
     -- * Making functions see a different environment
     deceive,
 
@@ -101,6 +101,9 @@ module Control.Monad.Dep.Advice
     -- $records
     adviseRecord,
     deceiveRecord,
+    -- * Plugging Has-based constructors
+    distributeDepT,
+    component,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -116,6 +119,7 @@ where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Has
+import Control.Monad.Dep.Env
 import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Functor.Identity
 import Data.Kind
@@ -126,6 +130,7 @@ import Data.SOP.NP
 import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
+import Data.Coerce
 
 -- $setup
 --
@@ -419,6 +424,7 @@ class Multicurryable as e_ m r curried | curried -> as e_ m r where
   multiuncurry :: curried -> NP I as -> DepT e_ m r
   multicurry :: (NP I as -> DepT e_ m r) -> curried
   _runFromEnv :: m (e_ (DepT e_ m)) -> (e_ (DepT e_ m) -> curried) -> DownToBaseMonad as e_ m r curried
+  _askFinalDepT :: (e_ (DepT e_ m) -> m curried) -> curried
 
 instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
   type DownToBaseMonad '[] e_ m r (DepT e_ m r) = m r
@@ -427,12 +433,19 @@ instance Monad m => Multicurryable '[] e_ m r (DepT e_ m r) where
   _runFromEnv producer extractor = do
     e <- producer
     runDepT (extractor e) e
+  _askFinalDepT f = do
+    env <- ask
+    r <- lift (f env)
+    r
 
-instance Multicurryable as e_ m r curried => Multicurryable (a ': as) e_ m r (a -> curried) where
+instance (Functor m, Multicurryable as e_ m r curried) => Multicurryable (a ': as) e_ m r (a -> curried) where
   type DownToBaseMonad (a ': as) e_ m r (a -> curried) = a -> DownToBaseMonad as e_ m r curried
   multiuncurry f (I a :* as) = multiuncurry @as @e_ @m @r @curried (f a) as
   multicurry f a = multicurry @as @e_ @m @r @curried (f . (:*) (I a))
   _runFromEnv producer extractor a = _runFromEnv @as @e_ @m @r @curried producer (\f -> extractor f a)
+  _askFinalDepT f = 
+    let switcheroo action a = fmap ($ a) action
+     in _askFinalDepT @as @e_ @m @r . flip (fmap switcheroo f)
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment, run
 -- the 'DepT' transformer at the tip of a curried function.
@@ -453,6 +466,12 @@ runFinalDepT ::
   -- | a new function with effects in the base monad
   DownToBaseMonad as e_ m r curried
 runFinalDepT producer extractor = _runFromEnv producer (const extractor)
+
+askFinalDepT ::
+  forall as e_ m r curried. 
+  Multicurryable as e_ m r curried =>
+  (e_ (DepT e_ m) -> m curried) -> curried
+askFinalDepT = _askFinalDepT @as @e_ @m @r
 
 -- | Given a base monad @m@ action that gets hold of the 'DepT' environment,
 -- and a function capable of extracting a curried function from the
@@ -595,7 +614,7 @@ instance Monad m => Gullible '[] e e_ m r (DepT e_ m r) where
   type NewtypedEnv '[] e e_ m r (DepT e_ m r) = ReaderT e m r
   _deceive f action = DepT (withReaderT f action)
 
-instance Gullible as e e_ m r curried => Gullible (a ': as) e e_ m r (a -> curried) where
+instance (Functor m, Gullible as e e_ m r curried) => Gullible (a ': as) e e_ m r (a -> curried) where
   type NewtypedEnv (a ': as) e e_ m r (a -> curried) = a -> NewtypedEnv as e e_ m r curried
   _deceive f g a = deceive @as @e @e_ @m @r f (g a)
 
@@ -769,6 +788,80 @@ deceiveRecord ::
   -- | The deceived record.
   gullible (DepT e_ m)
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
+
+
+-- | Having a 'DepT' action that returns a record-of-functions with effects in
+-- 'DepT' is the same as having the record itself, because we can obtain the initial
+-- environment by 'ask'ing for it in each member function.
+distributeDepT 
+    :: forall e_ m record . DistributiveRecord e_ m record => 
+    -- | 'DepT' action that returns the component
+    DepT e_ m (record (DepT e_ m)) ->
+    -- | component whose methods get the environment by 'ask'ing.
+    record (DepT e_ m)
+distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
+
+-- | Given a constructor that returns a record-of-functions with effects in 'DepT',
+-- produce a record in which the member functions 'ask' for the environment themselves.
+--
+-- You must have a sufficiently polymorphic constructor—both in the monad and
+-- in the environment—to invoke this function.
+--
+-- 'component' lets you plug simple component constructors 
+-- into a 'DepT'-based environment.
+--
+-- Compare with 'Control.Monad.Dep.Env.constructor' from "Control.Monad.Dep.Env", which 
+-- is intended to be used with 'Control.Monad.Dep.Env.fixEnv'-based environments.
+component 
+    :: forall e_ m record . (Applicative m, DistributiveRecord e_ m record) => 
+    -- | constructor which takes the environment as a positional parameter.
+    (e_ (DepT e_ m) -> record (DepT e_ m)) ->
+    -- | component whose methods get the environment by 'ask'ing.
+    record (DepT e_ m)
+component f = _distribute @e_ @m (pure . f)
+
+
+
+type DistributiveRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class DistributiveRecord e_ m record where
+    _distribute :: (e_ (DepT e_ m) -> m (record (DepT e_ m))) -> record (DepT e_ m)
+
+type DistributiveProduct :: ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
+class DistributiveProduct e_ m product where
+    _distributeProduct :: (e_ (DepT e_ m) -> m (product k)) -> product k
+
+instance
+  ( G.Generic (advised (DepT e_ m)),
+    G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+    DistributiveProduct e_ m advised_,
+    Functor m
+  ) =>
+  DistributiveRecord e_ m advised
+  where
+  _distribute f =
+    let advised_ = _distributeProduct @_ @e_ @m (fmap (fmap (G.unM1 . G.unM1 . G.from)) f)
+     in G.to (G.M1 (G.M1 advised_))
+
+instance
+  ( DistributiveProduct e_ m advised_left,
+    DistributiveProduct e_ m advised_right,
+    Functor m
+  ) =>
+  DistributiveProduct e_ m (advised_left G.:*: advised_right)
+  where
+  _distributeProduct f  = 
+      _distributeProduct @_ @e_ @m (fmap (fmap (\(l G.:*: _) -> l)) f) 
+      G.:*: 
+      _distributeProduct @_ @e_ @m (fmap (fmap (\(_ G.:*: r) -> r)) f) 
+
+instance
+  ( 
+    Functor m, 
+    Multicurryable as e_ m r advised
+  ) =>
+  DistributiveProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
+  where
+  _distributeProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (fmap (fmap (G.unK1 . G.unM1))  f)
 
 -- advising *all* fields of a record
 --
