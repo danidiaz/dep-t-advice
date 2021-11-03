@@ -101,6 +101,7 @@ module Control.Monad.Dep.Advice
     -- $records
     adviseRecord,
     deceiveRecord,
+    -- * Plugging Has-based constructors
     distributeDepT,
     component,
 
