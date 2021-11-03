@@ -1,5 +1,9 @@
 # Revision history for dep-t-advice
 
+## 0.4.8.0 
+
+* Added 'Control.Monad.Dep.SimpleAdvice'.
+
 ## 0.4.7.0 
 
 * Added 'distributeDepT' and 'component'.
