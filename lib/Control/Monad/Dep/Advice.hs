@@ -117,6 +117,7 @@ where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Has
+import Control.Monad.Dep.Env
 import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Functor.Identity
 import Data.Kind
@@ -795,11 +796,11 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 -- 'MonadDep' or 'MonadReader' constraints (merely 'Has' ones) into a
 -- 'DepT'-based environment.
 askForEnv 
-    :: forall e_ m record .  AskingRecord e_ m record
+    :: forall e_ m record .  AskingRecord e_ m record => 
     -- | constructor which takes the environment as a positional parameter.
-    => (e_ (DepT e_ m) -> record (DepT e_ m)) 
+    (e_ (DepT e_ m) -> record (DepT e_ m)) ->
     -- | component whose methods get the environment by 'ask'ing.
-    -> record (DepT e_ m)
+    record (DepT e_ m)
 askForEnv = _askForEnv @e_ @m
 
 type AskingRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
