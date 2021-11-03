@@ -145,7 +145,7 @@ allocateMap :: ContT () IO (IORef (Map Int String))
 allocateMap = ContT $ bracket (newIORef Map.empty) pure
 
 makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
-makeController''' = askForEnv makeController
+makeController''' = component makeController
 
 type EnvHKD :: (Type -> Type) -> (Type -> Type) -> Type
 data EnvHKD h m = EnvHKD
@@ -171,15 +171,15 @@ env = EnvHKD {
       logger = 
         parseConf `bindPhase` \(LoggerConfiguration {messagePrefix}) -> 
         skipPhase @Allocator $
-        pure $ askForEnv (makeStdoutLogger messagePrefix)
+        pure $ component (makeStdoutLogger messagePrefix)
     , repository = 
         skipPhase @Configurator $
         allocateMap `bindPhase` \ref -> 
-        pure $ askForEnv (makeInMemoryRepository ref)
+        pure $ component (makeInMemoryRepository ref)
     , controller = 
         skipPhase @Configurator $
         skipPhase @Allocator $ 
-        pure $ askForEnv makeController
+        pure $ component makeController
 }
 
 testEnvConstruction :: Assertion
@@ -193,11 +193,11 @@ testEnvConstruction = do
                 (\fieldName (Kleisli f) -> Kleisli \o -> explicitParseField f o (fromString fieldName)) 
             $ env
         Right allocators = parseEither parser value 
-    runContT (pullPhase @Allocator allocators) \deppie -> do
-        resourceId <- runFromDep (pure deppie) create
-        runFromDep (pure deppie) append resourceId "foo"
-        runFromDep (pure deppie) append resourceId "bar"
-        Just result <- runFromDep (pure deppie) inspect resourceId
+    runContT (pullPhase @Allocator allocators) \(pure -> deppie) -> do
+        resourceId <- runFromDep deppie create
+        runFromDep deppie append resourceId "foo"
+        runFromDep deppie append resourceId "bar"
+        Just result <- runFromDep deppie inspect resourceId
         assertEqual "" "foobar" $ result
 
 tests :: TestTree
