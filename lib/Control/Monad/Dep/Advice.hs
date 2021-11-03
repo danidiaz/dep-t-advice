@@ -795,7 +795,7 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 -- environment by 'ask'ing for it in each member function.
 distributeDepT 
     :: forall e_ m record . DistributiveRecord e_ m record => 
-    -- | constructor which takes the environment as a positional parameter.
+    -- | 'DepT' action that returns the component
     DepT e_ m (record (DepT e_ m)) ->
     -- | component whose methods get the environment by 'ask'ing.
     record (DepT e_ m)
