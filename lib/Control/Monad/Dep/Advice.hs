@@ -806,11 +806,11 @@ distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
 -- You must have a sufficiently polymorphic constructor—both in the monad and
 -- in the environment—to invoke this function.
 --
--- 'component' lets you plug simple component constructors written without
--- 'MonadDep' or 'MonadReader' constraints (merely 'Has' ones) into a
--- 'DepT'-based environment.
+-- 'component' lets you plug simple component constructors 
+-- into a 'DepT'-based environment.
 --
--- Compare with "Control.Monad.Dep.Env.constructor".
+-- Compare with "Control.Monad.Dep.Env.constructor", which is used to plug
+-- constructors into a "Control.Monad.Dep.Env.fixEnv"-based environment.
 component 
     :: forall e_ m record . (Applicative m, DistributiveRecord e_ m record) => 
     -- | constructor which takes the environment as a positional parameter.
