@@ -48,9 +48,11 @@ common common-tasty
 
 library
   import: common
-  exposed-modules:     Control.Monad.Dep.SimpleAdvice
-                       Control.Monad.Dep.Advice
+  exposed-modules:     Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advice.Basic
+                       Control.Monad.Dep.SimpleAdvice
+  other-modules:       Control.Monad.Dep.SimpleAdvice.Internal    
+                        
   hs-source-dirs:      lib 
 
 test-suite tests
@@ -64,6 +66,14 @@ test-suite weird-advice-tests
   main-is:             weird-advice-tests.hs
   build-depends:       
                        barbies            ^>= 2.0.2.0
+
+test-suite simple-advice-tests
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             simple-advice-tests.hs
+  build-depends:       
+                       barbies            ^>= 2.0.2.0
+
 
 test-suite tests-has-conversion
   import:              common-tasty

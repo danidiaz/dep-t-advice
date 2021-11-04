@@ -24,6 +24,7 @@
 module Control.Monad.Dep.SimpleAdvice
   ( -- * The Advice type
     Advice,
+    AspectT (..),
 
     -- * Creating Advice values
     makeAdvice,
@@ -76,6 +77,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Identity
 import Control.Monad.Writer.Class
 import Control.Monad.Zip
+import Control.Monad.Dep.SimpleAdvice.Internal 
 
 -- $setup
 --
@@ -107,67 +109,6 @@ import Control.Monad.Zip
 -- >>> import Data.IORef
 -- >>> import GHC.Generics (Generic)
 -- >>> import GHC.Generics qualified
-
--- | A generic transformation of 'AspectT'-effectful functions with environment
--- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
--- provided the functions satisfy certain constraint @ca@ of kind @Type ->
--- Constraint@ on all of their arguments.
---
--- Note that the type constructor for the environment @e_@ is given unapplied.
--- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
--- IO ()@ doesn't. See also 'Ensure'.
---
--- 'Advice's that don't care about the @ca@ constraint (because they don't
--- touch function arguments) can leave it polymorphic, and this facilitates
--- 'Advice' composition, but then the constraint must be given the catch-all
--- `Top` value (using a type application) at the moment of calling 'advise'.
---
--- See "Control.Monad.Dep.Advice.Basic" for examples.
-type Advice ::
-  (Type -> Constraint) ->
-  (Type -> Type) ->
-  Type ->
-  Type
-data Advice ca m r where
-  Advice ::
-    forall u ca m r.
-    Proxy u ->
-    ( forall as.
-      All ca as =>
-      NP I as ->
-      AspectT m (u, NP I as)
-    ) ->
-    ( u ->
-      AspectT m r ->
-      AspectT m r
-    ) ->
-    Advice ca m r
-
-type AspectT ::
-  (Type -> Type) ->
-  Type ->
-  Type
-newtype AspectT (m :: Type -> Type) (r :: Type) = AspectT {runAspectT :: m r}
-  deriving
-    ( Functor,
-      Applicative,
-      Alternative,
-      Monad,
-      MonadFix,
-      MonadFail,
-      MonadZip,
-      MonadPlus,
-      MonadCont,
-      MonadIO,
-      MonadUnliftIO
-    )
-
-instance MonadTrans AspectT where
-  lift = AspectT 
-
-deriving newtype instance MonadState s m => MonadState s (AspectT m)
-deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
-deriving newtype instance MonadError e m => MonadError e (AspectT m)
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
