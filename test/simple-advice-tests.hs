@@ -40,6 +40,7 @@ import GHC.Generics
 import Test.Tasty
 import Test.Tasty.HUnit
 
+-- the "component" we want to decorate
 newtype Foo m = Foo { runFoo :: Int -> Bool -> m () } 
                 deriving stock Generic
 
@@ -49,6 +50,7 @@ fooFunc = \_ _ -> tell ["foo"]
 foo :: MonadWriter [String] m => Foo m
 foo = Foo fooFunc
 
+-- works with functions of any number of arguments
 someAdvice :: MonadWriter [String] m => Advice Top m r 
 someAdvice = makeExecutionAdvice \action -> do
     tell ["before"]
