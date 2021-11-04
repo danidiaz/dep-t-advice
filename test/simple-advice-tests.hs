@@ -41,13 +41,13 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 newtype Foo m = Foo { runFoo :: Int -> Bool -> m () } 
-    deriving stock Generic
+                deriving stock Generic
 
-bareFoo :: MonadWriter [String] m => Int -> Bool -> m ()  
-bareFoo = \_ _ -> tell ["foo"] 
+fooFunc :: MonadWriter [String] m => Int -> Bool -> m ()  
+fooFunc = \_ _ -> tell ["foo"] 
 
 foo :: MonadWriter [String] m => Foo m
-foo = Foo bareFoo
+foo = Foo fooFunc
 
 someAdvice :: MonadWriter [String] m => Advice Top m r 
 someAdvice = makeExecutionAdvice \action -> do
@@ -55,6 +55,9 @@ someAdvice = makeExecutionAdvice \action -> do
     r <- action
     tell ["after"]
     pure r
+
+advisedFoo :: MonadWriter [String] m => Foo m
+advisedFoo = advising (adviseRecord @Top @Top \_ -> someAdvice) foo
 
 --
 --
@@ -65,7 +68,7 @@ tests =
     [
       testCase "adviseBare" $
         assertEqual "" ["before","foo","after"] $
-            let advisedFunc = advise @Top someAdvice bareFoo
+            let advisedFunc = advise @Top someAdvice fooFunc
              in execWriter $ runAspectT $ advisedFunc 0 False
     , testCase "adviseRecord" $
         assertEqual "" ["before","foo","after"] $
