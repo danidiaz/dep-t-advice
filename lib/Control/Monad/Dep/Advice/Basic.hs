@@ -131,7 +131,7 @@ printArgs h prefix =
 --  >>> runFromEnv (pure envIO) _controllerB 0
 --  logger2 ran
 --
-doLocally :: forall ca e_ m r. Monad m => (forall n. e_ n -> e_ n) -> Advice ca e_ m r 
+doLocally :: forall ca e_ m r. Monad m => (forall n. Monad n => e_ n -> e_ n) -> Advice ca e_ m r 
 doLocally transform = makeExecutionAdvice (local transform)  
 
 

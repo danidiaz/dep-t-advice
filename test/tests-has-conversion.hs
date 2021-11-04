@@ -24,6 +24,7 @@
 
 module Main (main) where
 
+import Prelude hiding (log)
 import Control.Monad.Dep
 import Control.Monad.Dep.Has
 import Control.Monad.Dep.Env
@@ -34,11 +35,6 @@ import Control.Monad.Writer
 import Control.Monad.RWS
 import Data.Kind
 import Data.List (intercalate,lookup)
-import Rank2 qualified
-import Rank2.TH qualified
-import Test.Tasty
-import Test.Tasty.HUnit
-import Prelude hiding (log)
 import Data.Proxy
 import System.IO
 import GHC.Generics (Generic)
@@ -58,7 +54,8 @@ import Data.Functor.Compose
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-
+import Test.Tasty
+import Test.Tasty.HUnit
 
 --
 --
@@ -90,6 +87,9 @@ data LoggerConfiguration = LoggerConfiguration {
 
 makeStdoutLogger :: MonadIO m => MessagePrefix -> env -> Logger m
 makeStdoutLogger prefix _ = Logger (\msg -> liftIO (putStrLn (Text.unpack prefix ++ msg)))
+
+nullLogger :: Applicative m => Logger m
+nullLogger = Logger (\_ -> pure ())
 
 makeInMemoryRepository 
     :: (Has Logger m env, MonadIO m) 
@@ -132,20 +132,13 @@ makeController (asCall -> call) = Controller {
           call findById key 
     }
 
--- from purely Has-using to MonadDep-using
--- this is very verbose, how to automate it?
--- makeController'' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
--- makeController'' = Controller {
---         create = askFinalDepT $ fmap create makeController
---       , append = askFinalDepT $ fmap append makeController
---       , inspect = askFinalDepT $ fmap inspect makeController
---     }
-
 allocateMap :: ContT () IO (IORef (Map Int String))
 allocateMap = ContT $ bracket (newIORef Map.empty) pure
 
+-- using component in islation. gnarly signature
 makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
 makeController''' = component makeController
+--
 
 type EnvHKD :: (Type -> Type) -> (Type -> Type) -> Type
 data EnvHKD h m = EnvHKD
@@ -157,10 +150,10 @@ data EnvHKD h m = EnvHKD
 
 deriving via Autowired (EnvHKD Identity m) instance Autowireable r_ m (EnvHKD Identity m) => Has r_ m (EnvHKD Identity m)
 
+type Configurator = Kleisli Parser Value 
+
 parseConf :: FromJSON a => Configurator a
 parseConf = Kleisli parseJSON
-
-type Configurator = Kleisli Parser Value 
 
 type Allocator = ContT () IO
 
@@ -179,7 +172,12 @@ env = EnvHKD {
     , controller = 
         skipPhase @Configurator $
         skipPhase @Allocator $ 
-        pure $ component makeController
+        pure $ let c = component makeController 
+                   -- For the create method we'll use nullLogger 
+                   -- instead of the default one, 
+                   -- even in sub-calls to other components.
+                   theAdvice = doLocally \env -> env {logger = pure nullLogger}
+                in c { create = advise theAdvice (create c) }
 }
 
 testEnvConstruction :: Assertion
