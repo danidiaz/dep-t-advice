@@ -77,9 +77,9 @@
 -- This modue is an alternative to "Control.Monad.Dep.Advice" with two advantages:
 --
 -- - It doesn't use 'Control.Monad.Dep.DepT'. The types are simpler because
---   they don't need to refer to 'Control.Monad.Dep.DepT's environment.
+--   they don't need to refer to 'Control.Monad.Dep.DepT''s environment.
 --
--- - Unlike in "Control.Monad.Dep.Advice", we can advice functions / components
+-- - Unlike in "Control.Monad.Dep.Advice", we can advise functions / components
 --   which work on a fixed concrete monad like 'IO'.
 module Control.Monad.Dep.SimpleAdvice
   ( -- * Preparing components for being advised
