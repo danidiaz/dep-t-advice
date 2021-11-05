@@ -195,7 +195,6 @@ makeExecutionAdvice ::
   Advice ca m r
 makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
 
-data Pair a b = Pair !a !b
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
 -- effects in 'AspectT', and all of its arguments must satisfy the @ca@ constraint.

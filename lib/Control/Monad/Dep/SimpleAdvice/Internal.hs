@@ -169,3 +169,5 @@ deriving newtype instance MonadState s m => MonadState s (AspectT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
 deriving newtype instance MonadError e m => MonadError e (AspectT m)
 
+data Pair a b = Pair !a !b
+
