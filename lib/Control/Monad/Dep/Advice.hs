@@ -20,7 +20,7 @@
 {-# LANGUAGE BlockArguments #-}
 
 -- |
---    This package provides the 'Advice' datatype, along for functions for creating,
+--    This module provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
 --    'Advice's represent generic transformations on 'DepT'-effectful functions of

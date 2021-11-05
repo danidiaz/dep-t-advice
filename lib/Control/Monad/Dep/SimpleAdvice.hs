@@ -21,10 +21,72 @@
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
+-- | 
+-- This module provides the 'Advice' datatype, along for functions for creating,
+-- manipulating, composing and applying values of that type.
+--
+-- 'Advice's represent generic transformations on effectful functions of
+-- any number of arguments.
+--
+-- >>> :{
+--    foo0 :: DepT NilEnv IO (Sum Int)
+--    foo0 = pure (Sum 5)
+--    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
+--    foo1 _ = foo0
+--    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
+--    foo2 _ = foo1
+-- :}
+--
+-- They work for monadic actions of zero arguments:
+--
+-- >>> advise (printArgs stdout "foo0") foo0 `runDepT` NilEnv
+-- foo0:
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- And for functions of one or more arguments, provided they end on a monadic action:
+--
+-- >>> advise (printArgs stdout "foo1") foo1 False `runDepT` NilEnv
+-- foo1: False
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- >>> advise (printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
+-- foo2: 'd' False
+-- <BLANKLINE>
+-- Sum {getSum = 5}
+--
+-- 'Advice's can also tweak the result value of functions:
+--
+-- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
+-- Sum {getSum = 0}
+--
+-- And they can be combined using @Advice@'s 'Monoid' instance before being
+-- applied:
+--
+-- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
+-- foo2: 'd' False
+-- <BLANKLINE>
+-- Sum {getSum = 0}
+--
+-- Although sometimes composition might require harmonizing the constraints
+-- each 'Advice' places on the arguments, if they differ.
+--
+-- __NOTE__:
+--
+-- This modue is an alternative to "Control.Monad.Dep.Advice" with two advantages:
+--
+-- - It doesn't use 'Control.Monad.Dep.DepT'. The types are simpler because
+--   they don't need to refer to 'Control.Monad.Dep.DepT's environment.
+--
+-- - Unlike in "Control.Monad.Dep.Advice", we can advice functions / components
+--   which work on a fixed concrete monad like 'IO'.
 module Control.Monad.Dep.SimpleAdvice
-  ( -- * The Advice type
-    Advice,
+  ( -- * Preparing components for being advised
+    advising,
     AspectT (..),
+    -- * The Advice type
+    Advice,
 
     -- * Creating Advice values
     makeAdvice,
@@ -33,13 +95,12 @@ module Control.Monad.Dep.SimpleAdvice
 
     -- * Applying Advices
     advise,
-    advising,
 
     -- * Harmonizing Advice argument constraints
     -- $restrict
     restrictArgs,
 
-    -- * Advising and deceiving entire records
+    -- * Advising entire records
     -- $records
     adviseRecord,
 
@@ -229,6 +290,12 @@ advise (Advice _ tweakArgs tweakExecution) advisee = do
         tweakExecution u (uncurried args')
    in multicurry @as @m @r uncurried'
 
+-- | This function \"installs\" an 'AspectT' newtype wrapper for the monad
+-- parameter of a record-of-functions, applies some function on
+-- the tweaked component, and then removes the wrapper from the result.
+--
+-- This is necessary because the typeclass machinery which handles
+-- 'Advice's uses 'AspectT' as a \"mark\" to recognize \"the end of the function\".
 advising 
     :: Coercible (r_ m) (r_ (AspectT m))
     => (r_ (AspectT m) -> r_ (AspectT m))
