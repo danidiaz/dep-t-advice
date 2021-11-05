@@ -28,6 +28,8 @@ import Prelude hiding (log)
 import Barbies
 import Control.Monad.Dep
 import Control.Monad.Dep.SimpleAdvice
+import Control.Monad.Dep.Advice (toSimple)
+import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -40,6 +42,7 @@ import GHC.Generics
 import Test.Tasty
 import Test.Tasty.HUnit
 import Data.IORef
+import System.IO
 
 -- the "component" we want to decorate
 newtype Foo m = Foo { runFoo :: Int -> Bool -> m () } 
@@ -80,6 +83,10 @@ concreteAdvisedFoo :: IORef [String] -> Foo IO
 concreteAdvisedFoo ref =
     advising (adviseRecord @Top @Top \_ -> refAdvice ref) (concreteFoo ref)
 
+printAdvisedFoo :: IORef [String] -> Foo IO
+printAdvisedFoo ref =
+    advising (adviseRecord @_ @Top (\_ -> toSimple (printArgs stdout "args: "))) (concreteFoo ref)
+
 --
 --
 tests :: TestTree
@@ -100,6 +107,11 @@ tests =
         () <- runFoo (concreteAdvisedFoo ref) 0 False
         result <- readIORef ref
         assertEqual "" ["before","foo","after"] result
+    , testCase "print adviseRecord" $ do
+        ref <- newIORef []
+        () <- runFoo (printAdvisedFoo ref) 0 False
+        result <- readIORef ref
+        assertEqual "" ["foo"] result
     ]
 
 main :: IO ()
