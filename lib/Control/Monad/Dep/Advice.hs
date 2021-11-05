@@ -17,6 +17,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- |
 --    This package provides the 'Advice' datatype, along for functions for creating,
@@ -105,6 +106,9 @@ module Control.Monad.Dep.Advice
     distributeDepT,
     component,
 
+    -- * Interfacing with "simple" advices
+    toSimple,
+
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -131,6 +135,7 @@ import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
 import Data.Coerce
+import Control.Monad.Dep.SimpleAdvice.Internal qualified as SA
 
 -- $setup
 --
@@ -1037,3 +1042,11 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 -- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
 --
 -- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
+
+-- | An advice that is polymorphic on the environment (allowing it to unify
+-- with 'Control.Monad.Dep.NilEnv') can be converted to a "simple" 'Control.Monad.Dep.SimpleAdvice.Advice' that doesn't require 'Control.Monad.Dep.DepT' at all. 
+toSimple :: Monad m => Advice ca NilEnv m r -> SA.Advice ca m r
+toSimple (Advice proxy withArgs withAction) = SA.Advice proxy 
+    (\args -> SA.AspectT $ flip runDepT NilEnv $ withArgs args) 
+    (\u (SA.AspectT action) -> SA.AspectT . flip runDepT NilEnv . withAction u $ lift action) 
+

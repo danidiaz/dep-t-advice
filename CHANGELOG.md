@@ -3,6 +3,9 @@
 ## 0.4.8.0 
 
 * Added 'Control.Monad.Dep.SimpleAdvice'.
+* Slightly tweaked the signature for "doLocally", adding a monad constraint.
+  Technically a breaking change, however, "doLocally" was almost completely
+  useless without it.
 
 ## 0.4.7.0 
 
