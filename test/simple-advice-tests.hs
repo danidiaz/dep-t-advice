@@ -39,6 +39,7 @@ import Data.SOP
 import GHC.Generics
 import Test.Tasty
 import Test.Tasty.HUnit
+import Data.IORef
 
 -- the "component" we want to decorate
 newtype Foo m = Foo { runFoo :: Int -> Bool -> m () } 
@@ -61,6 +62,24 @@ someAdvice = makeExecutionAdvice \action -> do
 advisedFoo :: MonadWriter [String] m => Foo m
 advisedFoo = advising (adviseRecord @Top @Top \_ -> someAdvice) foo
 
+-- Unlike regular advices, which require decorated
+-- functions to be sufficiently polymorphic,
+-- "simple" advices can decorate
+-- non-DepT *concrete* monads.
+concreteFoo :: IORef [String] -> Foo IO
+concreteFoo ref = Foo \_ _ -> modifyIORef ref (\xs -> xs ++ ["foo"])
+
+refAdvice :: MonadIO m => IORef [String] -> Advice Top m r 
+refAdvice ref = makeExecutionAdvice \action -> do
+    liftIO $ modifyIORef ref (\xs -> xs ++ ["before"])
+    r <- action
+    liftIO $ modifyIORef ref (\xs -> xs ++ ["after"])
+    pure r
+
+concreteAdvisedFoo :: IORef [String] -> Foo IO
+concreteAdvisedFoo ref =
+    advising (adviseRecord @Top @Top \_ -> refAdvice ref) (concreteFoo ref)
+
 --
 --
 tests :: TestTree
@@ -76,6 +95,11 @@ tests =
         assertEqual "" ["before","foo","after"] $
           let advised = advising (adviseRecord @Top @Top \_ -> someAdvice) foo
            in execWriter $ runFoo advised 0 False
+    , testCase "concrete adviseRecord" $ do
+        ref <- newIORef []
+        () <- runFoo (concreteAdvisedFoo ref) 0 False
+        result <- readIORef ref
+        assertEqual "" ["before","foo","after"] result
     ]
 
 main :: IO ()
