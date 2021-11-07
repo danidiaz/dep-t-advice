@@ -20,6 +20,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- | 
 -- This module provides the 'Advice' datatype, along for functions for creating,
@@ -89,6 +90,8 @@ module Control.Monad.Dep.Advize
     Advice,
     AspectT (..),
     makeAdvice,
+    makeArgsAdvice,
+    makeExecutionAdvice,
 --
 --    -- * Creating Advice values
 --    makeAdvice,
@@ -185,6 +188,16 @@ deriving newtype instance MonadState s m => MonadState s (AspectT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
 deriving newtype instance MonadError e m => MonadError e (AspectT m)
 
+instance Monad m => Semigroup (Advice ca m r) where
+  Advice outer <> Advice inner = Advice \args -> do
+    (tweakOuter, argsOuter) <- outer args
+    (tweakInner, argsInner) <- inner argsOuter
+    pure (tweakOuter . tweakInner, argsInner)
+
+instance Monad m => Monoid (Advice ca m r) where
+  mappend = (<>)
+  mempty = Advice \args -> pure (id, args)
+
 makeAdvice ::
   forall ca m r.
     ( forall as.
@@ -209,4 +222,15 @@ makeArgsAdvice tweakArgs =
   makeAdvice $ \args -> do
     args' <- tweakArgs args
     pure (id, args')
+
+makeExecutionAdvice ::
+  forall ca m r.
+  Applicative m =>
+  -- | The function that tweaks the execution.
+  ( AspectT m r ->
+    AspectT m r
+  ) ->
+  Advice ca m r
+makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
+
 
