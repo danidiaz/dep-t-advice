@@ -170,8 +170,6 @@ instance Monad m => Monoid (Advice ca m r) where
   mappend = (<>)
   mempty = Advice \args -> pure (id, args)
 
-
-
 type AspectT ::
   (Type -> Type) ->
   Type ->
@@ -375,4 +373,30 @@ instance
   AdvisedComponent IWrapped ca m cr (I advised)
   where
   _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc f advised)
+
+--
+-- arg restriction
+restrictArgs ::
+  forall more less m r.
+  -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
+  (forall x. Dict more x -> Dict less x) ->
+  -- | Advice with less restrictive constraint on the args.
+  Advice less m r ->
+  -- | Advice with more restrictive constraint on the args.
+  Advice more m r
+-- about the order of the type parameters... which is more useful?
+-- A possible principle to follow:
+-- We are likely to know the "less" constraint, because advices are likely to
+-- come pre-packaged and having a type signature.
+-- We arent' so sure about having a signature for a whole composed Advice,
+-- because the composition might be done
+-- on the fly, while constructing a record, without a top-level binding with a
+-- type signature.  This seems to favor putting "more" first.
+restrictArgs evidence (Advice advice) = Advice \args ->
+    let advice' :: forall as. All more as => NP I as -> AspectT m (AspectT m r -> AspectT m r, NP I as)
+        advice' args' =
+            case Data.SOP.Dict.mapAll @more @less evidence of
+               f -> case f (Dict @(All more) @as) of
+                        Dict -> advice args'
+     in advice' args
 
