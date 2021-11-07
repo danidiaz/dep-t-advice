@@ -88,6 +88,7 @@ module Control.Monad.Dep.Advize
 --    -- * The Advice type
     Advice,
     AspectT (..),
+    makeAdvice,
 --
 --    -- * Creating Advice values
 --    makeAdvice,
@@ -157,16 +158,6 @@ data Advice ca m r where
     Advice ca m r
 
 
-makeAdvice ::
-  forall ca m r.
-    ( forall as.
-      All ca as =>
-      NP I as ->
-      AspectT m (AspectT m r -> AspectT m r, NP I as)
-    ) ->
-    Advice ca m r
-makeAdvice = Advice
-
 type AspectT ::
   (Type -> Type) ->
   Type ->
@@ -193,3 +184,29 @@ deriving newtype instance MonadReader env m => MonadReader env (AspectT m)
 deriving newtype instance MonadState s m => MonadState s (AspectT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
 deriving newtype instance MonadError e m => MonadError e (AspectT m)
+
+makeAdvice ::
+  forall ca m r.
+    ( forall as.
+      All ca as =>
+      NP I as ->
+      AspectT m (AspectT m r -> AspectT m r, NP I as)
+    ) ->
+    Advice ca m r
+makeAdvice = Advice
+
+makeArgsAdvice ::
+  forall ca m r.
+  Monad m =>
+  -- | The function that tweaks the arguments.
+  ( forall as.
+    All ca as =>
+    NP I as ->
+    AspectT m (NP I as)
+  ) ->
+  Advice ca m r
+makeArgsAdvice tweakArgs =
+  makeAdvice $ \args -> do
+    args' <- tweakArgs args
+    pure (id, args')
+
