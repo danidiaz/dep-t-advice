@@ -1,5 +1,10 @@
 # Revision history for dep-t-advice
 
+* renamed 'component' to 'askForEnv'.
+* removed all the runFromXXX helpers.
+* removed 'deceive'.
+* advise record now passes a NonEmpty
+
 ## 0.4.8.0 
 
 * Added 'Control.Monad.Dep.SimpleAdvice'.

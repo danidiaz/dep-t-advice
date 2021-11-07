@@ -160,6 +160,17 @@ data Advice ca m r where
     ) ->
     Advice ca m r
 
+instance Monad m => Semigroup (Advice ca m r) where
+  Advice outer <> Advice inner = Advice \args -> do
+    (tweakOuter, argsOuter) <- outer args
+    (tweakInner, argsInner) <- inner argsOuter
+    pure (tweakOuter . tweakInner, argsInner)
+
+instance Monad m => Monoid (Advice ca m r) where
+  mappend = (<>)
+  mempty = Advice \args -> pure (id, args)
+
+
 
 type AspectT ::
   (Type -> Type) ->
@@ -188,15 +199,11 @@ deriving newtype instance MonadState s m => MonadState s (AspectT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
 deriving newtype instance MonadError e m => MonadError e (AspectT m)
 
-instance Monad m => Semigroup (Advice ca m r) where
-  Advice outer <> Advice inner = Advice \args -> do
-    (tweakOuter, argsOuter) <- outer args
-    (tweakInner, argsInner) <- inner argsOuter
-    pure (tweakOuter . tweakInner, argsInner)
-
-instance Monad m => Monoid (Advice ca m r) where
-  mappend = (<>)
-  mempty = Advice \args -> pure (id, args)
+advising 
+    :: Coercible (r_ m) (r_ (AspectT m))
+    => (r_ (AspectT m) -> r_ (AspectT m))
+    -> r_ m -> r_ m
+advising f = coerce . f . coerce
 
 makeAdvice ::
   forall ca m r.
@@ -233,4 +240,139 @@ makeExecutionAdvice ::
   Advice ca m r
 makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
 
+type Multicurryable ::
+  [Type] ->
+  (Type -> Type) ->
+  Type ->
+  Type ->
+  Constraint
+class Multicurryable as m r curried | curried -> as m r where
+  multiuncurry :: curried -> NP I as -> AspectT m r
+  multicurry :: (NP I as -> AspectT m r) -> curried
+
+instance Monad m => Multicurryable '[] m r (AspectT m r) where
+  multiuncurry action Nil = action
+  multicurry f = f Nil
+
+instance Multicurryable as m r curried => Multicurryable (a ': as) m r (a -> curried) where
+  multiuncurry f (I a :* as) = multiuncurry @as @m @r @curried (f a) as
+  multicurry f a = multicurry @as @m @r @curried (f . (:*) (I a))
+
+advise ::
+  forall ca m r as advisee.
+  (Multicurryable as m r advisee, All ca as, Monad m) =>
+  -- | The advice to apply.
+  Advice ca m r ->
+  -- | A function to be adviced.
+  advisee ->
+  advisee
+advise (Advice f) advisee = do
+  let uncurried = multiuncurry @as @m @r advisee
+      uncurried' args = do
+        (tweakExecution, args') <- f args
+        tweakExecution (uncurried args')
+   in multicurry @as @m @r uncurried'
+
+-- | Gives 'Advice' to all the functions in a record-of-functions.
+--
+-- The function that builds the advice receives a list of tuples @(TypeRep, String)@
+-- which represent the record types and fields names we have
+-- traversed until arriving at the advised function. This info can be useful for
+-- logging advices. It's a list instead of a single tuple because
+-- 'adviseRecord' works recursively.
+--
+-- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
+-- and the @cr@ constraint on the result type must be supplied by means of a
+-- type application. Supply 'Top' if no constraint is required.
+adviseRecord ::
+  forall ca cr m advised.
+  AdvisedRecord ca m cr advised =>
+  -- | The advice to apply.
+  (forall r . cr r => [(TypeRep, String)] -> Advice ca m r) ->
+  -- | The record to advise recursively.
+  advised (AspectT m) ->
+  -- | The advised record.
+  advised (AspectT m)
+adviseRecord = _adviseRecord @ca @m @cr []
+
+type AdvisedRecord :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
+class AdvisedRecord ca m cr advised where
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised (AspectT m) -> advised (AspectT m)
+
+type AdvisedProduct :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
+class AdvisedProduct ca m cr advised_ where
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised_ k -> advised_ k
+
+instance
+  ( G.Generic (advised (AspectT m)),
+    -- G.Rep (advised (AspectT m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
+    G.Rep (advised (AspectT m)) ~ G.D1 x (G.C1 y advised_),
+    Typeable advised,
+    AdvisedProduct ca m cr advised_
+  ) =>
+  AdvisedRecord ca m cr advised
+  where
+  _adviseRecord acc f unadvised =
+    let G.M1 (G.M1 unadvised_) = G.from unadvised
+        advised_ = _adviseProduct @_ @ca @m @cr (typeRep (Proxy @advised)) acc f unadvised_
+     in G.to (G.M1 (G.M1 advised_))
+
+instance
+  ( AdvisedProduct ca m cr advised_left,
+    AdvisedProduct ca m cr advised_right
+  ) =>
+  AdvisedProduct ca m cr (advised_left G.:*: advised_right)
+  where
+  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @m @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @m @cr tr acc f unadvised_right
+
+data RecordComponent
+  = Terminal
+  | IWrapped
+  | Recurse
+
+type DiscriminateAdvisedComponent :: Type -> RecordComponent
+type family DiscriminateAdvisedComponent c where
+  DiscriminateAdvisedComponent (a -> b) = Terminal
+  DiscriminateAdvisedComponent (AspectT m x) = Terminal
+  DiscriminateAdvisedComponent (Identity _) = IWrapped
+  DiscriminateAdvisedComponent (I _) = IWrapped
+  DiscriminateAdvisedComponent _ = Recurse
+
+type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
+class AdvisedComponent component_type ca m cr advised where
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised -> advised
+
+instance
+  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised,
+    KnownSymbol fieldName
+  ) =>
+  AdvisedProduct ca m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
+  where
+  _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
+    let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
+     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc' f advised))
+
+instance
+  AdvisedRecord ca m cr advisable =>
+  AdvisedComponent Recurse ca m cr (advisable (AspectT m))
+  where
+  _adviseComponent acc f advised = _adviseRecord @ca @m @cr acc f advised
+
+instance
+  (Multicurryable as m r advised, All ca as, cr r, Monad m) =>
+  AdvisedComponent Terminal ca m cr advised
+  where
+  _adviseComponent acc f advised = advise @ca @m (f acc) advised
+
+instance
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised =>
+  AdvisedComponent IWrapped ca m cr (Identity advised)
+  where
+  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc f advised)
+
+instance
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised =>
+  AdvisedComponent IWrapped ca m cr (I advised)
+  where
+  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc f advised)
 
