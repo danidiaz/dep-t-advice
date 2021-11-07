@@ -1056,7 +1056,7 @@ toSimple (Advice proxy withArgs withAction) = SA.Advice proxy
 data SomeTweakAction e_ m r where
     SomeTweakAction :: (DepT e_ m r -> DepT e_ m r) -> SomeTweakAction e_ m r
 
--- | Convert a 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
+-- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
 fromSimple :: forall ca e_ m r. Monad m => (forall n . Monad n => e_ n -> SA.Advice ca n r) -> Advice ca e_ m r
 fromSimple f =
     Advice 
