@@ -83,32 +83,24 @@
 -- - Unlike in "Control.Monad.Dep.Advice", we can advise functions / components
 --   which work on a fixed concrete monad like 'IO'.
 module Control.Monad.Dep.Advize
-  ( -- * Preparing components for being advised
---    advising,
---    AspectT (..),
---    -- * The Advice type
+  ( 
+    -- * The Advice type
     Advice,
     AspectT (..),
+    -- * Creating Advice values
     makeAdvice,
     makeArgsAdvice,
     makeExecutionAdvice,
---
---    -- * Creating Advice values
---    makeAdvice,
---    makeArgsAdvice,
---    makeExecutionAdvice,
---
---    -- * Applying Advices
---    advise,
---
---    -- * Harmonizing Advice argument constraints
---    -- $restrict
---    restrictArgs,
---
---    -- * Advising entire records
---    -- $records
---    adviseRecord,
-
+    -- * Preparing components for being advised
+    advising,
+    -- * Applying Advices
+    advise,
+    -- * Advising entire records
+    -- $records
+    adviseRecord,
+    -- * Harmonizing Advice argument constraints
+    -- $restrict
+    restrictArgs,
     -- * "sop-core" re-exports
     -- $sop
     Top,
