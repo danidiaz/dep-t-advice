@@ -108,6 +108,7 @@ module Control.Monad.Dep.Advice
 
     -- * Interfacing with "simple" advices
     toSimple,
+    fromSimple,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -135,6 +136,7 @@ import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
 import Data.Coerce
+import Data.Bifunctor (first)
 import Control.Monad.Dep.SimpleAdvice.Internal qualified as SA
 
 -- $setup
@@ -1049,4 +1051,22 @@ toSimple :: Monad m => Advice ca NilEnv m r -> SA.Advice ca m r
 toSimple (Advice proxy withArgs withAction) = SA.Advice proxy 
     (\args -> SA.AspectT $ flip runDepT NilEnv $ withArgs args) 
     (\u (SA.AspectT action) -> SA.AspectT . flip runDepT NilEnv . withAction u $ lift action) 
+
+
+data SomeTweakAction e_ m r where
+    SomeTweakAction :: (DepT e_ m r -> DepT e_ m r) -> SomeTweakAction e_ m r
+
+-- | Convert a 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
+fromSimple :: forall ca e_ m r. Monad m => (forall n . Monad n => e_ n -> SA.Advice ca n r) -> Advice ca e_ m r
+fromSimple f =
+    Advice 
+        (Proxy @(SomeTweakAction e_ m r)) 
+        (\args -> do
+            env <- ask
+            case f env of
+                SA.Advice proxy tweakArgs tweakAction -> do
+                    let dtweakedArgs = SA.runAspectT $ tweakArgs args
+                    first (SomeTweakAction . coerce . tweakAction) <$> dtweakedArgs)
+        (\(SomeTweakAction withAction) da -> withAction da)
+
 
