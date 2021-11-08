@@ -101,6 +101,10 @@ module Control.Monad.Dep.Advize
     -- * Harmonizing Advice argument constraints
     -- $restrict
     restrictArgs,
+    --
+    distributeDepT,
+    elideEnv,
+
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -119,6 +123,7 @@ import Control.Monad.Fix
 import Control.Monad.Dep
 import Control.Monad.Dep.Has
 import Data.Functor.Identity
+import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Kind
 import Data.List.NonEmpty qualified as N
 import Data.SOP
@@ -413,5 +418,85 @@ askFinalDepT ::
   Multiflip as e_ m r curried =>
   (e_ (DepT e_ m) -> m curried) -> curried
 askFinalDepT = _askFinalDepT @as @e_ @m @r
+
+
+type DistributiveRecord :: ((Type -> Type) -> Type) -> (Type -> Type) -> ((Type -> Type) -> Type) -> Constraint
+class DistributiveRecord e_ m record where
+    _distribute :: (e_ (DepT e_ m) -> m (record (DepT e_ m))) -> record (DepT e_ m)
+
+type DistributiveProduct :: ((Type -> Type) -> Type) -> (Type -> Type) -> (k -> Type) -> Constraint
+class DistributiveProduct e_ m product where
+    _distributeProduct :: (e_ (DepT e_ m) -> m (product k)) -> product k
+
+instance
+  ( G.Generic (advised (DepT e_ m)),
+    G.Rep (advised (DepT e_ m)) ~ G.D1 x (G.C1 y advised_),
+    DistributiveProduct e_ m advised_,
+    Functor m
+  ) =>
+  DistributiveRecord e_ m advised
+  where
+  _distribute f =
+    let advised_ = _distributeProduct @_ @e_ @m (fmap (fmap (G.unM1 . G.unM1 . G.from)) f)
+     in G.to (G.M1 (G.M1 advised_))
+
+instance
+  ( DistributiveProduct e_ m advised_left,
+    DistributiveProduct e_ m advised_right,
+    Functor m
+  ) =>
+  DistributiveProduct e_ m (advised_left G.:*: advised_right)
+  where
+  _distributeProduct f  = 
+      _distributeProduct @_ @e_ @m (fmap (fmap (\(l G.:*: _) -> l)) f) 
+      G.:*: 
+      _distributeProduct @_ @e_ @m (fmap (fmap (\(_ G.:*: r) -> r)) f) 
+
+instance
+  ( 
+    Functor m, 
+    Multiflip as e_ m r advised
+  ) =>
+  DistributiveProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
+  where
+  _distributeProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (fmap (fmap (G.unK1 . G.unM1))  f)
+
+
+-- | Having a 'DepT' action that returns a record-of-functions with effects in
+-- 'DepT' is the same as having the record itself, because we can obtain the initial
+-- environment by 'ask'ing for it in each member function.
+distributeDepT 
+    :: forall e_ m record . DistributiveRecord e_ m record => 
+    -- | 'DepT' action that returns the component
+    DepT e_ m (record (DepT e_ m)) ->
+    -- | component whose methods get the environment by 'ask'ing.
+    record (DepT e_ m)
+distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
+
+-- | Given a constructor that returns a record-of-functions with effects in 'DepT',
+-- produce a record in which the member functions 'ask' for the environment themselves.
+--
+-- You must have a sufficiently polymorphic constructor—both in the monad and
+-- in the environment—to invoke this function.
+--
+-- 'component' lets you plug simple component constructors 
+-- into a 'DepT'-based environment.
+--
+-- Compare with 'Control.Monad.Dep.Env.constructor' from "Control.Monad.Dep.Env", which 
+-- is intended to be used with 'Control.Monad.Dep.Env.fixEnv'-based environments.
+elideEnv 
+    :: forall e_ m record . (Applicative m, DistributiveRecord e_ m record) => 
+    -- | constructor which takes the environment as a positional parameter.
+    (e_ (DepT e_ m) -> record (DepT e_ m)) ->
+    -- | component whose methods get the environment by 'ask'ing.
+    record (DepT e_ m)
+elideEnv f = _distribute @e_ @m (pure . f)
+
+elideEnv_Advice 
+    :: forall ca e_ m r . Monad m => 
+    (e_ (DepT e_ m) -> Advice ca (DepT e_ m) r) ->
+    Advice ca (DepT e_ m) r
+elideEnv_Advice f = undefined
+
 
 
