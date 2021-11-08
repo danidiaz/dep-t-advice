@@ -402,15 +402,15 @@ restrictArgs evidence (Advice advice) = Advice \args ->
 
 class Multicurryable as (DepT e_ m) r curried => Multiflip as e_ m r curried | curried -> as e_ m r where
   type DownToBaseMonad as e_ m r curried :: Type
-  _runFromEnv :: m (e_ (DepT e_ m)) -> (e_ (DepT e_ m) -> curried) -> DownToBaseMonad as e_ m r curried
+  _runFromEnv :: m (e_ (AspectT (DepT e_ m))) -> (e_ (AspectT (DepT e_ m)) -> curried) -> DownToBaseMonad as e_ m r curried
   _askFinalDepT :: (e_ (DepT e_ m) -> m curried) -> curried
 
 
-instance Monad m => Multiflip '[] e_ m r (AspectT (DepT e_ m) r) where
+instance (Monad m, Coercible (e_ (AspectT (DepT e_ m))) (e_ (DepT e_ m))) => Multiflip '[] e_ m r (AspectT (DepT e_ m) r) where
   type DownToBaseMonad '[] e_ m r (AspectT (DepT e_ m) r) = m r
   _runFromEnv producer extractor = do
     e <- producer
-    runDepT (runAspectT (extractor e)) e
+    runDepT (runAspectT (extractor e)) (coerce e)
   _askFinalDepT f = do
     env <- ask
     r <- lift (lift (f env))
@@ -523,26 +523,36 @@ popAdvice f = popAdvice' (DepT (ReaderT (pure . f)))
 
 runFromEnv ::
   forall as e_ m r curried.
-  Multiflip as e_ m r curried =>
+  ( Functor m
+  , Multiflip as e_ m r curried 
+  , Coercible (e_ (AspectT (DepT e_ m))) (e_ (DepT e_ m)) )
+  =>
   -- | action that gets hold of the environment
   m (e_ (DepT e_ m)) ->
   -- | gets a function from the environment with effects in 'DepT'
-  (e_ (DepT e_ m) -> curried) ->
+  (e_ (AspectT (DepT e_ m)) -> curried) ->
   -- | a new function with effects in the base monad
   DownToBaseMonad as e_ m r curried
-runFromEnv = _runFromEnv
+runFromEnv envAction f = _runFromEnv (coerce <$> envAction) f
+
+--   _runFromEnv :: m (e_ (AspectT (DepT e_ m))) -> (e_ (AspectT (DepT e_ m)) -> curried) -> DownToBaseMonad as e_ m r curried
+-- 
 
 -- | Like 'runFromEnv', but the function to run is extracted from a dependency
 -- @dep@ which is found using 'Has'. The selector should be concrete enough to
 -- identify @dep@ in the environment.
 runFromDep ::
   forall dep as e_ m r curried.
-  (Multiflip as e_ m r curried, Has dep (DepT e_ m) (e_ (DepT e_ m))) =>
+  ( Functor m
+  , Multiflip as e_ m r curried
+  , Coercible (e_ (AspectT (DepT e_ m))) (e_ (DepT e_ m)) 
+  , Has dep (AspectT (DepT e_ m)) (e_ (AspectT (DepT e_ m))) ) 
+  =>
   -- | action that gets hold of the environment
   m (e_ (DepT e_ m)) ->
   -- | selector that gets a function from a dependency found using 'Has'
-  (dep (DepT e_ m) -> curried) ->
+  (dep (AspectT (DepT e_ m)) -> curried) ->
   -- | a new function with effects in the base monad
   DownToBaseMonad as e_ m r curried
-runFromDep envAction member = _runFromEnv envAction (member . dep)
+runFromDep envAction member = _runFromEnv (coerce <$> envAction) (member . dep)
 
