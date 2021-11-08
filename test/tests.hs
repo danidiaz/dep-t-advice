@@ -18,7 +18,7 @@ module Main (main) where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
-import Control.Monad.Dep.Advice.Basic
+import Control.Monad.Dep.Advice.Examples
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.RWS
@@ -196,7 +196,7 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 --
 -- Experiment about adding instrumetation
 
-doLogging :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
+doLogging :: forall e m r. (HasLogger e m, Monad m) => Advice Show m r
 doLogging = makeAdvice @()
         (\args -> do
             e <- ask
@@ -237,7 +237,7 @@ weirdAdvicedEnv =
 -- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
  
 -- Checking that constraints on the environment and the monad are collected "automatically"
-doLogging' :: forall e m r . (Ensure HasLogger e m, Ensure HasRepository e m, MonadIO m) => Advice Show e m r
+doLogging' :: forall e m r . (HasLogger e m, HasRepository e m, MonadIO m) => Advice Show m r
 doLogging' = doLogging 
 
 justARepositoryConstraint :: forall ca e m r. (Ensure HasRepository e m, Monad m) => Advice ca e m r
