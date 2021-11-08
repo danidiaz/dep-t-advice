@@ -7,14 +7,15 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BlockArguments #-}
 
 
 -- |
--- This module contains basic examples advices.
+-- This module contains basic examples of advices.
 --
 -- __/BEWARE!/__ These are provided for illustrative purposes only, they
 -- strive for simplicity and not robustness or efficiency.
-module Control.Monad.Dep.Advice.Basic
+module Control.Monad.Dep.Advice.Examples
   ( -- * Basic advices
     returnMempty,
     printArgs,
@@ -65,7 +66,7 @@ import Control.Concurrent
 
 -- | Makes functions discard their result and always return 'mempty'.
 --
-returnMempty :: forall ca e_ m r. (Monad m, Monoid r) => Advice ca e_ m r
+returnMempty :: forall ca m r. (Monad m, Monoid r) => Advice ca m r
 returnMempty =
   makeExecutionAdvice
     ( \action -> do
@@ -76,7 +77,7 @@ returnMempty =
 -- | Given a 'Handle' and a prefix string, makes functions print their
 -- arguments to the 'Handle'.
 --
-printArgs :: forall e_ m r. MonadIO m => Handle -> String -> Advice Show e_ m r
+printArgs :: forall m r. MonadIO m => Handle -> String -> Advice Show m r
 printArgs h prefix =
   makeArgsAdvice
     ( \args -> do
@@ -131,7 +132,7 @@ printArgs h prefix =
 --  >>> runFromEnv (pure envIO) _controllerB 0
 --  logger2 ran
 --
-doLocally :: forall ca e_ m r. Monad m => (forall n. Monad n => e_ n -> e_ n) -> Advice ca e_ m r 
+doLocally :: forall ca e_ m r. Monad m => (forall n. Monad n => e_ n -> e_ n) -> Advice ca (DepT e_ m) r 
 doLocally transform = makeExecutionAdvice (local transform)  
 
 
@@ -161,23 +162,19 @@ instance Eq AnyEq where
 --
 -- A better implementation of this advice would likely use an @AnyHashable@
 -- helper datatype for the keys.
-doCachingBadly :: forall e_ m r. Monad m => (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) e_ m r
-doCachingBadly cacheLookup cachePut =
-  makeAdvice @AnyEq
-    ( \args ->
-        let key = AnyEq $ cfoldMap_NP (Proxy @(And Eq Typeable)) (\(I a) -> [AnyEq a]) $ args
-         in pure (key, args)
-    )
-    ( \key action -> do
-        mr <- lift $ cacheLookup key
-        case mr of
-          Nothing -> do
-            r <- action
-            lift $ cachePut key r
-            pure r
-          Just r ->
-            pure r
-    )
+doCachingBadly :: forall m r. Monad m => (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) m r
+doCachingBadly cacheLookup cachePut = makeAdvice \args ->
+    let key = AnyEq $ cfoldMap_NP (Proxy @(And Eq Typeable)) (\(I a) -> [AnyEq a]) $ args
+        tweakAction action = do
+            mr <- lift $ cacheLookup key
+            case mr of
+              Nothing -> do
+                r <- action
+                lift $ cachePut key r
+                pure r
+              Just r ->
+                pure r
+     in pure (tweakAction, args)
 
 -- | Makes functions that return `()` launch asynchronously.
 --
@@ -185,11 +182,9 @@ doCachingBadly cacheLookup cachePut =
 -- package instead of bare `forkIO`. 
 --
 -- The @IO@ monad could be generalized to @MonadUnliftIO@.
-doAsyncBadly :: forall ca e_ . Advice ca e_ IO ()
-doAsyncBadly = makeExecutionAdvice (\action -> do
-        e <- ask 
-        _ <- liftIO $ forkIO $ runDepT action e
+doAsyncBadly :: forall ca . Advice ca IO ()
+doAsyncBadly = makeExecutionAdvice \action -> do
+        _ <- liftIO $ forkIO $ runAspectT action
         pure ()
-    )
 
 
