@@ -473,6 +473,17 @@ distributeDepT
     record (DepT e_ m)
 distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
 
+distributeDepT_Advice 
+    :: forall ca e_ m r . Monad m => 
+    DepT e_ m (Advice ca (DepT e_ m) r) ->
+    Advice ca (DepT e_ m) r
+distributeDepT_Advice (DepT (ReaderT f)) = Advice \args -> do
+    env <- ask
+    Advice f' <- lift $ lift $ f env
+    f' args
+
+-- elideEnv_Advice (pure . f)
+
 -- | Given a constructor that returns a record-of-functions with effects in 'DepT',
 -- produce a record in which the member functions 'ask' for the environment themselves.
 --
@@ -496,7 +507,7 @@ elideEnv_Advice
     :: forall ca e_ m r . Monad m => 
     (e_ (DepT e_ m) -> Advice ca (DepT e_ m) r) ->
     Advice ca (DepT e_ m) r
-elideEnv_Advice f = undefined
+elideEnv_Advice f = distributeDepT_Advice (DepT (ReaderT (pure . f)))
 
 
 
