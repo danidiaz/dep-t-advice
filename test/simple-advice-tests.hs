@@ -28,7 +28,7 @@ import Prelude hiding (log)
 import Barbies
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
-import Control.Monad.Dep.Advice.Examples
+import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer

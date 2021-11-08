@@ -50,7 +50,7 @@ library
   import: common
   exposed-modules:     Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advize
-                       Control.Monad.Dep.Advice.Examples
+                       Control.Monad.Dep.Advice.Basic
                        Control.Monad.Dep.SimpleAdvice
   other-modules:       Control.Monad.Dep.SimpleAdvice.Internal    
                         

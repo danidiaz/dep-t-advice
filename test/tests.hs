@@ -13,12 +13,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Main (main) where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
-import Control.Monad.Dep.Advice.Examples
+import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.RWS
@@ -31,6 +32,7 @@ import Test.Tasty.HUnit
 import Prelude hiding (log)
 import Data.Proxy
 import System.IO
+import Data.Function ((&))
 
 -- Some helper typeclasses.
 --
@@ -196,23 +198,21 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 --
 -- Experiment about adding instrumetation
 
-doLogging :: forall e m r. (HasLogger e m, Monad m) => Advice Show m r
-doLogging = makeAdvice @()
-        (\args -> do
-            e <- ask
-            let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
-            logger e $ "advice before: " ++ intercalate "," args'
-            pure (pure args))
-        (\() action -> do 
+doLogging :: forall e m r. (HasLogger m e, Monad m) => e -> Advice Show m r
+doLogging e = makeAdvice \args -> do
+    let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
+    lift $ logger e $ "advice before: " ++ intercalate "," args'
+    let tweakAction action = do
             e <- ask
             r <- action
-            logger e $ "advice after"
-            pure r)
+            lift $ logger e $ "advice after"
+            pure r
+    pure (tweakAction, args)
 
 advicedEnv :: Env (DepT Env (Writer TestTrace))
-advicedEnv =
+advicedEnv = env & advising \env ->
    env {
-         _controller = advise doLogging (_controller env)
+         _controller = advise (popAdvice doLogging) (_controller env)
        }
 
 expectedAdviced :: TestTrace
@@ -237,24 +237,24 @@ weirdAdvicedEnv =
 -- doLogging'' = restrictEnv @EnsureLoggerAndWriter (Sub Dict) doLogging
  
 -- Checking that constraints on the environment and the monad are collected "automatically"
-doLogging' :: forall e m r . (HasLogger e m, HasRepository e m, MonadIO m) => Advice Show m r
+doLogging' :: forall e m r . (HasLogger m e, HasRepository m e, MonadIO m) => e -> Advice Show m r
 doLogging' = doLogging 
 
-justARepositoryConstraint :: forall ca e m r. (Ensure HasRepository e m, Monad m) => Advice ca e m r
-justARepositoryConstraint = mempty
+justARepositoryConstraint :: forall ca e m r. (HasRepository m e, Monad m) => e -> Advice ca m r
+justARepositoryConstraint _ = mempty
 
-doLogging'' :: forall e m r . (Ensure HasLogger e m, Ensure HasRepository e m, MonadIO m) => Advice Show e m r
-doLogging'' = doLogging <> justARepositoryConstraint
+doLogging'' :: forall e m r . (HasLogger m e, HasRepository m e, MonadIO m) => e -> Advice Show m r
+doLogging'' _ = doLogging <> justARepositoryConstraint
 
 -- Checking that constraints on the results are collected "automatically"
-returnMempty' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
+returnMempty' :: forall ca m r. (Monad m, Monoid r, Show r, Read r) => Advice ca m r
 returnMempty' = returnMempty
 
-justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => Advice ca e m r
+justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => e -> Advice ca m r
 justAResultConstraint = mempty
 
-returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
-returnMempty'' = returnMempty <> justAResultConstraint
+returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => e -> Advice ca m r
+returnMempty'' _ = returnMempty <> justAResultConstraint e
 
 printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @NilEnv @IO stdout "foo")
  

@@ -15,7 +15,7 @@
 --
 -- __/BEWARE!/__ These are provided for illustrative purposes only, they
 -- strive for simplicity and not robustness or efficiency.
-module Control.Monad.Dep.Advice.Examples
+module Control.Monad.Dep.Advice.Basic
   ( -- * Basic advices
     returnMempty,
     printArgs,
