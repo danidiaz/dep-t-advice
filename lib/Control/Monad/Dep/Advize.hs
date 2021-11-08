@@ -408,3 +408,10 @@ instance (Functor m, Multiflip as e_ m r curried) => Multiflip (a ': as) e_ m r 
      in _askFinalDepT @as @e_ @m @r . flip (fmap switcheroo f)
 
 
+askFinalDepT ::
+  forall as e_ m r curried. 
+  Multiflip as e_ m r curried =>
+  (e_ (DepT e_ m) -> m curried) -> curried
+askFinalDepT = _askFinalDepT @as @e_ @m @r
+
+
