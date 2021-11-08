@@ -104,6 +104,8 @@ module Control.Monad.Dep.Advize
     --
     distributeDepT,
     elideEnv,
+    distributeDepT_Advice,
+    elideEnv_Advice,
 
     -- * "sop-core" re-exports
     -- $sop
