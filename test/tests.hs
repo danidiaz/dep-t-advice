@@ -203,7 +203,6 @@ doLogging e = makeAdvice \args -> do
     let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
     lift $ logger e $ "advice before: " ++ intercalate "," args'
     let tweakAction action = do
-            e <- ask
             r <- action
             lift $ logger e $ "advice after"
             pure r
@@ -220,11 +219,11 @@ expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm g
 
 -- a small test of constraint composition
 weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
-weirdAdvicedEnv =
+weirdAdvicedEnv = env & advising \env ->
    env {
-         _controller = advise (doLogging <> returnMempty) (_controller env), --,
+         _controller = advise (popAdvice doLogging <> returnMempty) (_controller env), --,
          -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
-         _logger = advise @(Show `And` Eq) (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
+         _logger = advise @(Show `And` Eq) (makeAdvice (\args -> pure (id,  args))) (_logger env)
        }
 
 -- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
@@ -244,7 +243,7 @@ justARepositoryConstraint :: forall ca e m r. (HasRepository m e, Monad m) => e 
 justARepositoryConstraint _ = mempty
 
 doLogging'' :: forall e m r . (HasLogger m e, HasRepository m e, MonadIO m) => e -> Advice Show m r
-doLogging'' _ = doLogging <> justARepositoryConstraint
+doLogging'' e = doLogging e <> justARepositoryConstraint e
 
 -- Checking that constraints on the results are collected "automatically"
 returnMempty' :: forall ca m r. (Monad m, Monoid r, Show r, Read r) => Advice ca m r
@@ -254,9 +253,9 @@ justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => e -> Advi
 justAResultConstraint = mempty
 
 returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => e -> Advice ca m r
-returnMempty'' _ = returnMempty <> justAResultConstraint e
+returnMempty'' e = returnMempty <> justAResultConstraint e
 
-printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @NilEnv @IO stdout "foo")
+printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @IO stdout "foo")
  
 -- does EnvConstraint compile?
 
