@@ -297,20 +297,25 @@ cacheTestLogic = do
 
 type ExpensiveComputationMonad = RWS () ([String],()) [(AnyEq,String)]
 
-cacheLookup :: AnyEq -> ExpensiveComputationMonad (Maybe String)
+cacheLookup :: MonadState [(AnyEq,String)] m => AnyEq -> m (Maybe String)
 cacheLookup key = do
     cache <- get
     pure $ lookup key cache
 
-cachePut :: AnyEq -> String -> ExpensiveComputationMonad ()
+cachePut :: MonadState [(AnyEq,String)] m => AnyEq -> String -> m ()
 cachePut key v = modify ((key,v) :)
 
 cacheTestEnv :: CachingTestEnv (DepT CachingTestEnv ExpensiveComputationMonad)
-cacheTestEnv = CachingTestEnv {
-        _cacheTestLogic = cacheTestLogic,
-        _expensiveComputation = advise (doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
-        _logger2 = mkFakeLogger
-    }
+cacheTestEnv = 
+    let uncached = CachingTestEnv {
+                _cacheTestLogic = cacheTestLogic,
+                _expensiveComputation = mkFakeExpensiveComputation,
+                _logger2 = mkFakeLogger
+            }
+     in uncached & advising \env -> 
+            env {
+            _expensiveComputation = advise (doCachingBadly cacheLookup cachePut) (expensiveComputation env) 
+            }
 
 expectedCached :: ([String],())
 expectedCached = (["Doing expensive computation","0False","Doing expensive computation","1True","0False","1True"],())
