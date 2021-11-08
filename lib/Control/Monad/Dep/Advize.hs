@@ -392,3 +392,19 @@ restrictArgs evidence (Advice advice) = Advice \args ->
                         Dict -> advice args'
      in advice' args
 
+class Multicurryable as (DepT e_ m) r curried => Multiflip as e_ m r curried | curried -> as e_ m r where
+  _askFinalDepT :: (e_ (DepT e_ m) -> m curried) -> curried
+
+
+instance Monad m => Multiflip '[] e_ m r (AspectT (DepT e_ m) r) where
+  _askFinalDepT f = do
+    env <- ask
+    r <- lift (lift (f env))
+    r
+
+instance (Functor m, Multiflip as e_ m r curried) => Multiflip (a ': as) e_ m r (a -> curried) where
+  _askFinalDepT f = 
+    let switcheroo action a = fmap ($ a) action
+     in _askFinalDepT @as @e_ @m @r . flip (fmap switcheroo f)
+
+
