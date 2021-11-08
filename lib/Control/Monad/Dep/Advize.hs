@@ -102,10 +102,10 @@ module Control.Monad.Dep.Advize
     -- $restrict
     restrictArgs,
     --
-    distributeDepT,
-    elideEnv,
-    distributeDepT_Advice,
-    elideEnv_Advice,
+    distributeOverRecord,
+    askInRecord,
+    distributeOverAdvice,
+    askInAdvice,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -467,24 +467,24 @@ instance
 -- | Having a 'DepT' action that returns a record-of-functions with effects in
 -- 'DepT' is the same as having the record itself, because we can obtain the initial
 -- environment by 'ask'ing for it in each member function.
-distributeDepT 
+distributeOverRecord 
     :: forall e_ m record . DistributiveRecord e_ m record => 
     -- | 'DepT' action that returns the component
     DepT e_ m (record (DepT e_ m)) ->
     -- | component whose methods get the environment by 'ask'ing.
     record (DepT e_ m)
-distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
+distributeOverRecord (DepT (ReaderT action)) = _distribute @e_ @m @record action
 
-distributeDepT_Advice 
+distributeOverAdvice 
     :: forall ca e_ m r . Monad m => 
     DepT e_ m (Advice ca (DepT e_ m) r) ->
     Advice ca (DepT e_ m) r
-distributeDepT_Advice (DepT (ReaderT f)) = Advice \args -> do
+distributeOverAdvice (DepT (ReaderT f)) = Advice \args -> do
     env <- ask
     Advice f' <- lift $ lift $ f env
     f' args
 
--- elideEnv_Advice (pure . f)
+-- askInAdvice (pure . f)
 
 -- | Given a constructor that returns a record-of-functions with effects in 'DepT',
 -- produce a record in which the member functions 'ask' for the environment themselves.
@@ -497,19 +497,19 @@ distributeDepT_Advice (DepT (ReaderT f)) = Advice \args -> do
 --
 -- Compare with 'Control.Monad.Dep.Env.constructor' from "Control.Monad.Dep.Env", which 
 -- is intended to be used with 'Control.Monad.Dep.Env.fixEnv'-based environments.
-elideEnv 
+askInRecord 
     :: forall e_ m record . (Applicative m, DistributiveRecord e_ m record) => 
     -- | constructor which takes the environment as a positional parameter.
     (e_ (DepT e_ m) -> record (DepT e_ m)) ->
     -- | component whose methods get the environment by 'ask'ing.
     record (DepT e_ m)
-elideEnv f = _distribute @e_ @m (pure . f)
+askInRecord f = _distribute @e_ @m (pure . f)
 
-elideEnv_Advice 
+askInAdvice 
     :: forall ca e_ m r . Monad m => 
     (e_ (DepT e_ m) -> Advice ca (DepT e_ m) r) ->
     Advice ca (DepT e_ m) r
-elideEnv_Advice f = distributeDepT_Advice (DepT (ReaderT (pure . f)))
+askInAdvice f = distributeOverAdvice (DepT (ReaderT (pure . f)))
 
 
 
