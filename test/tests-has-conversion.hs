@@ -33,6 +33,7 @@ import Control.Monad.Dep.Advice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.RWS
+import Control.Monad.Trans.Identity
 import Data.Kind
 import Data.List (intercalate,lookup)
 import Data.Proxy
@@ -56,6 +57,8 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Test.Tasty
 import Test.Tasty.HUnit
+import Data.Coerce
+import Control.Monad.Trans.Identity
 
 --
 --
@@ -180,30 +183,21 @@ env = EnvHKD {
                 in c { create = advise theAdvice (create c) }
 }
 
-testEnvConstruction :: Assertion
-testEnvConstruction = do
-    let parseResult = eitherDecode' (fromString "{ \"logger\" : { \"messagePrefix\" : \"[foo]\" }, \"repository\" : null, \"controller\" : null }")
-    print parseResult 
-    let Right value = parseResult 
-        Kleisli (withObject "configuration" -> parser) = 
-              pullPhase @(Kleisli Parser Object) 
-            $ mapPhaseWithFieldNames 
-                (\fieldName (Kleisli f) -> Kleisli \o -> explicitParseField f o (fromString fieldName)) 
-            $ env
-        Right allocators = parseEither parser value 
-    runContT (pullPhase @Allocator allocators) \(pure -> deppie) -> do
-        resourceId <- runFromDep deppie create
-        runFromDep deppie append resourceId "foo"
-        runFromDep deppie append resourceId "bar"
-        Just result <- runFromDep deppie inspect resourceId
-        assertEqual "" "foobar" $ result
+
+foo :: EnvHKD Identity (DepT (EnvHKD Identity) IO)
+foo = undefined
+
+bar :: (EnvHKD Identity) (AspectT (DepT (EnvHKD Identity) IO))
+bar = decorate foo
+
+baz :: (EnvHKD Identity) (IdentityT (DepT (EnvHKD Identity) IO))
+baz = decorate' foo
 
 tests :: TestTree
 tests =
   testGroup
     "All"
     [
-     testCase "environmentConstruction" testEnvConstruction
     ]
 
 main :: IO ()

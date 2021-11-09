@@ -320,6 +320,11 @@ cacheTestEnv =
 expectedCached :: ([String],())
 expectedCached = (["Doing expensive computation","0False","Doing expensive computation","1True","0False","1True"],())
 
+cacheTestEnv' :: CachingTestEnv (AspectT (DepT CachingTestEnv ExpensiveComputationMonad))
+cacheTestEnv' = decorate cacheTestEnv
+
+
+--
 --
 --
 --

@@ -61,20 +61,20 @@ test-suite tests
   type:                exitcode-stdio-1.0
   main-is:             tests.hs
 
-test-suite weird-advice-tests
-  import:              common-tasty
-  type:                exitcode-stdio-1.0
-  main-is:             weird-advice-tests.hs
-  build-depends:       
-                       barbies            ^>= 2.0.2.0
-
-test-suite simple-advice-tests
-  import:              common-tasty
-  type:                exitcode-stdio-1.0
-  main-is:             simple-advice-tests.hs
-  build-depends:       
-                       barbies            ^>= 2.0.2.0
-
+-- test-suite weird-advice-tests
+--   import:              common-tasty
+--   type:                exitcode-stdio-1.0
+--   main-is:             weird-advice-tests.hs
+--   build-depends:       
+--                        barbies            ^>= 2.0.2.0
+-- 
+-- test-suite simple-advice-tests
+--   import:              common-tasty
+--   type:                exitcode-stdio-1.0
+--   main-is:             simple-advice-tests.hs
+--   build-depends:       
+--                        barbies            ^>= 2.0.2.0
+-- 
 
 test-suite tests-has-conversion
   import:              common-tasty
@@ -83,25 +83,25 @@ test-suite tests-has-conversion
   build-depends:       aeson,
                        containers
 
--- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
--- http://hackage.haskell.org/package/cabal-doctest
-test-suite doctests
-  import:              common-tests
-  ghc-options:         -threaded
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             doctests.hs
-  build-depends:       
-                       doctest            ^>= 0.18 
-                       
- -- https://cabal.readthedocs.io/en/3.4/cabal-package.html#benchmarks
-benchmark benchmark
-  import:              common-tests, 
-  type:                exitcode-stdio-1.0
-  ghc-options:         -O2
-  hs-source-dirs:      benchmark
-  main-is:             benchmarks.hs
-  build-depends:
-                       criterion ^>= 1.5,  
-
-
+-- -- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
+-- -- http://hackage.haskell.org/package/cabal-doctest
+-- test-suite doctests
+--   import:              common-tests
+--   ghc-options:         -threaded
+--   type:                exitcode-stdio-1.0
+--   hs-source-dirs:      test
+--   main-is:             doctests.hs
+--   build-depends:       
+--                        doctest            ^>= 0.18 
+--                        
+--  -- https://cabal.readthedocs.io/en/3.4/cabal-package.html#benchmarks
+-- benchmark benchmark
+--   import:              common-tests, 
+--   type:                exitcode-stdio-1.0
+--   ghc-options:         -O2
+--   hs-source-dirs:      benchmark
+--   main-is:             benchmarks.hs
+--   build-depends:
+--                        criterion ^>= 1.5,  
+-- 
+-- 

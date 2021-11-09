@@ -93,6 +93,8 @@ module Control.Monad.Dep.Advice
     makeExecutionAdvice,
     -- * Preparing components for being advised
     advising,
+    decorate,
+    decorate',
     -- * Applying Advices
     advise,
     -- * Advising entire records
@@ -102,6 +104,7 @@ module Control.Monad.Dep.Advice
     -- $restrict
     restrictArgs,
     -- * DepT-specific helpers
+    _runFromEnv,
     runFromEnv,
     runFromDep,
     popRecord',
@@ -144,6 +147,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Identity
 import Control.Monad.Writer.Class
 import Control.Monad.Zip
+import Control.Monad.Trans.Identity
 
 type Advice ::
   (Type -> Constraint) ->
@@ -202,6 +206,16 @@ advising
     => (r_ (AspectT m) -> r_ (AspectT m))
     -> r_ m -> r_ m
 advising f = coerce . f . coerce
+
+decorate 
+    :: Coercible (r_ m) (r_ (AspectT m))
+    => r_ m -> r_ (AspectT m)
+decorate = coerce
+
+decorate'
+    :: Coercible (r_ m) (r_ (IdentityT m))
+    => r_ m -> r_ (IdentityT m)
+decorate' = coerce
 
 makeAdvice ::
   forall ca m r.
