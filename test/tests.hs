@@ -338,7 +338,11 @@ tests =
         assertEqual "" expectedCached $
           let action = runFromEnv (pure cacheTestEnv) _cacheTestLogic 
               (_,w) = execRWS action () mempty
-           in w
+           in w,
+      testCase "multi-param" $
+          let action = runFromEnv (pure cacheTestEnv) _expensiveComputation 0 True
+              (_,_) = execRWS action () mempty
+           in pure ()
     ]
 
 main :: IO ()
