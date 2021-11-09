@@ -20,6 +20,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- | 
 -- This module provides the 'Advice' datatype, along for functions for creating,
@@ -274,11 +275,11 @@ advise ::
   -- | A function to be adviced.
   advisee ->
   advisee
-advise (Advice _ tweakArgs tweakExecution) advisee = do
+advise (Advice f) advisee = do
   let uncurried = multiuncurry @as @m @r advisee
       uncurried' args = do
-        (u, args') <- tweakArgs args
-        tweakExecution u (uncurried args')
+        (tweakExecution, args') <- f args
+        tweakExecution (uncurried args')
    in multicurry @as @m @r uncurried'
 
 -- | This function \"installs\" an 'AspectT' newtype wrapper for the monad
@@ -340,22 +341,6 @@ instance Multicurryable as m r curried => Multicurryable (a ': as) m r (a -> cur
 -- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
 
 -- | Makes the constraint on the arguments more restrictive.
-restrictArgs ::
-  forall more less m r.
-  -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
-  (forall x. Dict more x -> Dict less x) ->
-  -- | Advice with less restrictive constraint on the args.
-  Advice less m r ->
-  -- | Advice with more restrictive constraint on the args.
-  Advice more m r
--- about the order of the type parameters... which is more useful?
--- A possible principle to follow:
--- We are likely to know the "less" constraint, because advices are likely to
--- come pre-packaged and having a type signature.
--- We arent' so sure about having a signature for a whole composed Advice,
--- because the composition might be done
--- on the fly, while constructing a record, without a top-level binding with a
--- type signature.  This seems to favor putting "more" first.
 restrictArgs ::
   forall more less m r.
   -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.

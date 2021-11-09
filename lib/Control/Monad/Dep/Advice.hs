@@ -193,16 +193,11 @@ type Advice ::
   Type
 data Advice ca e_ m r where
   Advice ::
-    forall u ca e_ m r.
-    Proxy u ->
+    forall ca e_ m r.
     ( forall as.
       All ca as =>
       NP I as ->
-      DepT e_ m (u, NP I as)
-    ) ->
-    ( u ->
-      DepT e_ m r ->
-      DepT e_ m r
+      DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
     ) ->
     Advice ca e_ m r
 
@@ -213,60 +208,14 @@ data Advice ca e_ m r where
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
 instance Monad m => Semigroup (Advice ca e_ m r) where
-  Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
-    let captureExistentials ::
-          forall ca e_ r outer inner.
-          Proxy outer ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            DepT e_ m (outer, NP I as)
-          ) ->
-          ( outer ->
-            DepT e_ m r ->
-            DepT e_ m r
-          ) ->
-          Proxy inner ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            DepT e_ m (inner, NP I as)
-          ) ->
-          ( inner ->
-            DepT e_ m r ->
-            DepT e_ m r
-          ) ->
-          Advice ca e_ m r
-        captureExistentials _ tweakArgsOuter' tweakExecutionOuter' _ tweakArgsInner' tweakExecutionInner' =
-          Advice
-            (Proxy @(Pair outer inner))
-            ( let tweakArgs ::
-                    forall as.
-                    All ca as =>
-                    NP I as ->
-                    DepT e_ m (Pair outer inner, NP I as)
-                  tweakArgs args =
-                    do
-                      (uOuter, argsOuter) <- tweakArgsOuter' @as args
-                      (uInner, argsInner) <- tweakArgsInner' @as argsOuter
-                      pure (Pair uOuter uInner, argsInner)
-               in tweakArgs
-            )
-            ( let tweakExecution ::
-                    Pair outer inner ->
-                    DepT e_ m r ->
-                    DepT e_ m r
-                  tweakExecution =
-                    ( \(Pair uOuter uInner) action ->
-                        tweakExecutionOuter' uOuter (tweakExecutionInner' uInner action)
-                    )
-               in tweakExecution
-            )
-     in captureExistentials @ca @e_ outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+  Advice outer <> Advice inner = Advice \args -> do
+    (tweakOuter, argsOuter) <- outer args
+    (tweakInner, argsInner) <- inner argsOuter
+    pure (tweakOuter . tweakInner, argsInner)
 
 instance Monad m => Monoid (Advice ca e_ m r) where
   mappend = (<>)
-  mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
+  mempty = Advice \args -> pure (id, args)
 
 -- |
 --    The most general (and complex) way of constructing 'Advice's.
@@ -291,20 +240,15 @@ instance Monad m => Monoid (Advice ca e_ m r) where
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
 makeAdvice ::
-  forall u ca e_ m r.
+  forall ca e_ m r.
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e_ m (u, NP I as)
-  ) ->
-  -- | The function that tweaks the execution.
-  ( u ->
-    DepT e_ m r ->
-    DepT e_ m r
+    DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
   ) ->
   Advice ca e_ m r
-makeAdvice = Advice (Proxy @u)
+makeAdvice = Advice
 
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
@@ -326,12 +270,9 @@ makeArgsAdvice ::
   ) ->
   Advice ca e_ m r
 makeArgsAdvice tweakArgs =
-  makeAdvice @()
-    ( \args -> do
-        args <- tweakArgs args
-        pure ((), args)
-    )
-    (const id)
+  makeAdvice $ \args -> do
+    args' <- tweakArgs args
+    pure (id, args')
 
 -- |
 --    Create an advice which only tweaks the execution of the final monadic action.
@@ -350,7 +291,7 @@ makeExecutionAdvice ::
     DepT e_ m r
   ) ->
   Advice ca e_ m r
-makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
+makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
 
 data Pair a b = Pair !a !b
 
@@ -412,11 +353,11 @@ advise ::
   -- | A function to be adviced.
   advisee ->
   advisee
-advise (Advice _ tweakArgs tweakExecution) advisee = do
+advise (Advice f) advisee = do
   let uncurried = multiuncurry @as @e_ @m @r advisee
       uncurried' args = do
-        (u, args') <- tweakArgs args
-        tweakExecution u (uncurried args')
+        (tweakExecution, args') <- f args
+        tweakExecution (uncurried args')
    in multicurry @as @e_ @m @r uncurried'
 
 type Multicurryable ::
@@ -577,32 +518,13 @@ restrictArgs ::
 -- because the composition might be done
 -- on the fly, while constructing a record, without a top-level binding with a
 -- type signature.  This seems to favor putting "more" first.
-restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
-  let captureExistential ::
-        forall more less e_ m r u.
-        (forall x. Dict more x -> Dict less x) ->
-        Proxy u ->
-        ( forall as.
-          All less as =>
-          NP I as ->
-          DepT e_ m (u, NP I as)
-        ) ->
-        ( u ->
-          DepT e_ m r ->
-          DepT e_ m r
-        ) ->
-        Advice more e_ m r
-      captureExistential evidence' _ tweakArgs' tweakExecution' =
-        Advice
-          (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e_ m (u, NP I as)
-                tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
-                  f -> case f (Dict @(All more) @as) of
-                    Dict -> \args -> tweakArgs' @as args
-             in tweakArgs''
-          )
-          tweakExecution'
-   in captureExistential evidence proxy tweakArgs tweakExecution
+restrictArgs evidence (Advice advice) = Advice \args ->
+    let advice' :: forall as. All more as => NP I as -> DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
+        advice' args' =
+            case Data.SOP.Dict.mapAll @more @less evidence of
+               f -> case f (Dict @(All more) @as) of
+                        Dict -> advice args'
+     in advice' args
 
 --
 type Gullible ::
