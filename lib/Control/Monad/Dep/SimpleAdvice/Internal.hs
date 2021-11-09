@@ -20,6 +20,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Control.Monad.Dep.SimpleAdvice.Internal where
 
@@ -37,6 +38,7 @@ import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
 import Control.Applicative
+import Control.Monad.Reader
 import Control.Monad.Cont.Class
 import Control.Monad.Error.Class
 import Control.Monad.IO.Unlift
@@ -62,18 +64,14 @@ type Advice ::
   Type
 data Advice ca m r where
   Advice ::
-    forall u ca m r.
-    Proxy u ->
+    forall ca m r.
     ( forall as.
       All ca as =>
       NP I as ->
-      AspectT m (u, NP I as)
-    ) ->
-    ( u ->
-      AspectT m r ->
-      AspectT m r
+      AspectT m (AspectT m r -> AspectT m r, NP I as)
     ) ->
     Advice ca m r
+
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
@@ -82,60 +80,15 @@ data Advice ca m r where
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
 instance Monad m => Semigroup (Advice ca m r) where
-  Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
-    let captureExistentials ::
-          forall ca r outer inner.
-          Proxy outer ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            AspectT m (outer, NP I as)
-          ) ->
-          ( outer ->
-            AspectT m r ->
-            AspectT m r
-          ) ->
-          Proxy inner ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            AspectT m (inner, NP I as)
-          ) ->
-          ( inner ->
-            AspectT m r ->
-            AspectT m r
-          ) ->
-          Advice ca m r
-        captureExistentials _ tweakArgsOuter' tweakExecutionOuter' _ tweakArgsInner' tweakExecutionInner' =
-          Advice
-            (Proxy @(Pair outer inner))
-            ( let tweakArgs ::
-                    forall as.
-                    All ca as =>
-                    NP I as ->
-                    AspectT m (Pair outer inner, NP I as)
-                  tweakArgs args =
-                    do
-                      (uOuter, argsOuter) <- tweakArgsOuter' @as args
-                      (uInner, argsInner) <- tweakArgsInner' @as argsOuter
-                      pure (Pair uOuter uInner, argsInner)
-               in tweakArgs
-            )
-            ( let tweakExecution ::
-                    Pair outer inner ->
-                    AspectT m r ->
-                    AspectT m r
-                  tweakExecution =
-                    ( \(Pair uOuter uInner) action ->
-                        tweakExecutionOuter' uOuter (tweakExecutionInner' uInner action)
-                    )
-               in tweakExecution
-            )
-     in captureExistentials @ca outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+  Advice outer <> Advice inner = Advice \args -> do
+    (tweakOuter, argsOuter) <- outer args
+    (tweakInner, argsInner) <- inner argsOuter
+    pure (tweakOuter . tweakInner, argsInner)
 
 instance Monad m => Monoid (Advice ca m r) where
   mappend = (<>)
-  mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
+  mempty = Advice \args -> pure (id, args)
+
 
 -- | This transformer is isomorphic to 'Control.Monad.Trans.Identity.IdentityT'.
 --
@@ -162,6 +115,7 @@ newtype AspectT (m :: Type -> Type) (r :: Type) = AspectT {runAspectT :: m r}
 instance MonadTrans AspectT where
   lift = AspectT 
 
+deriving newtype instance MonadReader env m => MonadReader env (AspectT m)
 deriving newtype instance MonadState s m => MonadState s (AspectT m)
 deriving newtype instance MonadWriter w m => MonadWriter w (AspectT m)
 deriving newtype instance MonadError e m => MonadError e (AspectT m)

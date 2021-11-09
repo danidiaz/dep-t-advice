@@ -195,20 +195,14 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 --    type of the existential @u@ through a type application. Otherwise you'll
 --    get weird \"u is untouchable\" errors.
 makeAdvice ::
-  forall u ca m r.
-  -- | The function that tweaks the arguments.
-  ( forall as.
-    All ca as =>
-    NP I as ->
-    AspectT m (u, NP I as)
-  ) ->
-  -- | The function that tweaks the execution.
-  ( u ->
-    AspectT m r ->
-    AspectT m r
-  ) ->
-  Advice ca m r
-makeAdvice = Advice (Proxy @u)
+  forall ca m r.
+    ( forall as.
+      All ca as =>
+      NP I as ->
+      AspectT m (AspectT m r -> AspectT m r, NP I as)
+    ) ->
+    Advice ca m r
+makeAdvice = Advice
 
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
@@ -230,12 +224,9 @@ makeArgsAdvice ::
   ) ->
   Advice ca m r
 makeArgsAdvice tweakArgs =
-  makeAdvice @()
-    ( \args -> do
-        args <- tweakArgs args
-        pure ((), args)
-    )
-    (const id)
+  makeAdvice $ \args -> do
+    args' <- tweakArgs args
+    pure (id, args')
 
 -- |
 --    Create an advice which only tweaks the execution of the final monadic action.
@@ -254,7 +245,7 @@ makeExecutionAdvice ::
     AspectT m r
   ) ->
   Advice ca m r
-makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
+makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
 
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
@@ -365,32 +356,29 @@ restrictArgs ::
 -- because the composition might be done
 -- on the fly, while constructing a record, without a top-level binding with a
 -- type signature.  This seems to favor putting "more" first.
-restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
-  let captureExistential ::
-        forall more less m r u.
-        (forall x. Dict more x -> Dict less x) ->
-        Proxy u ->
-        ( forall as.
-          All less as =>
-          NP I as ->
-          AspectT m (u, NP I as)
-        ) ->
-        ( u ->
-          AspectT m r ->
-          AspectT m r
-        ) ->
-        Advice more m r
-      captureExistential evidence' _ tweakArgs' tweakExecution' =
-        Advice
-          (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> AspectT m (u, NP I as)
-                tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
-                  f -> case f (Dict @(All more) @as) of
-                    Dict -> \args -> tweakArgs' @as args
-             in tweakArgs''
-          )
-          tweakExecution'
-   in captureExistential evidence proxy tweakArgs tweakExecution
+restrictArgs ::
+  forall more less m r.
+  -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
+  (forall x. Dict more x -> Dict less x) ->
+  -- | Advice with less restrictive constraint on the args.
+  Advice less m r ->
+  -- | Advice with more restrictive constraint on the args.
+  Advice more m r
+-- about the order of the type parameters... which is more useful?
+-- A possible principle to follow:
+-- We are likely to know the "less" constraint, because advices are likely to
+-- come pre-packaged and having a type signature.
+-- We arent' so sure about having a signature for a whole composed Advice,
+-- because the composition might be done
+-- on the fly, while constructing a record, without a top-level binding with a
+-- type signature.  This seems to favor putting "more" first.
+restrictArgs evidence (Advice advice) = Advice \args ->
+    let advice' :: forall as. All more as => NP I as -> AspectT m (AspectT m r -> AspectT m r, NP I as)
+        advice' args' =
+            case Data.SOP.Dict.mapAll @more @less evidence of
+               f -> case f (Dict @(All more) @as) of
+                        Dict -> advice args'
+     in advice' args
 
 
 -- advising *all* fields of a record
