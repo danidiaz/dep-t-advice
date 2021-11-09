@@ -137,7 +137,7 @@ allocateMap = ContT $ bracket (newIORef Map.empty) pure
 
 -- using component in islation. gnarly signature
 makeController''' :: forall e_ m . (Has Logger (DepT e_ m) (e_ (DepT e_ m)), Has Repository (DepT e_ m) (e_ (DepT e_ m)), Monad m) => Controller (DepT e_ m)
-makeController''' = component makeController
+makeController''' = popRecord makeController
 --
 
 type EnvHKD :: (Type -> Type) -> (Type -> Type) -> Type
@@ -164,15 +164,15 @@ env = EnvHKD {
       logger = 
         parseConf `bindPhase` \(LoggerConfiguration {messagePrefix}) -> 
         skipPhase @Allocator $
-        pure $ component (makeStdoutLogger messagePrefix)
+        pure $ popRecord (makeStdoutLogger messagePrefix)
     , repository = 
         skipPhase @Configurator $
         allocateMap `bindPhase` \ref -> 
-        pure $ component (makeInMemoryRepository ref)
+        pure $ popRecord (makeInMemoryRepository ref)
     , controller = 
         skipPhase @Configurator $
         skipPhase @Allocator $ 
-        pure $ let c = component makeController 
+        pure $ let c = popRecord makeController 
                    -- For the create method we'll use nullLogger 
                    -- instead of the default one, 
                    -- even in sub-calls to other components.
