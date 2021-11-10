@@ -51,6 +51,7 @@ library
   exposed-modules:     Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advice.Basic
                        Control.Monad.Dep.SimpleAdvice
+                       Control.Monad.Dep.SimpleAdvice.Basic
   other-modules:       Control.Monad.Dep.SimpleAdvice.Internal    
                         
   hs-source-dirs:      lib 

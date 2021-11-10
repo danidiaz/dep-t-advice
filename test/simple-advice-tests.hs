@@ -29,7 +29,7 @@ import Barbies
 import Control.Monad.Dep
 import Control.Monad.Dep.SimpleAdvice
 import Control.Monad.Dep.Advice (toSimple)
-import Control.Monad.Dep.Advice.Basic
+import Control.Monad.Dep.SimpleAdvice.Basic
 import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -85,7 +85,7 @@ concreteAdvisedFoo ref =
 
 printAdvisedFoo :: IORef [String] -> Foo IO
 printAdvisedFoo ref =
-    advising (adviseRecord @_ @Top (\_ -> toSimple (printArgs stdout "args: "))) (concreteFoo ref)
+    advising (adviseRecord @_ @Top (\_ -> printArgs stdout "args: ")) (concreteFoo ref)
 
 --
 --
