@@ -970,9 +970,10 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 -- | An advice that is polymorphic on the environment (allowing it to unify
 -- with 'Control.Monad.Dep.NilEnv') can be converted to a "simple" 'Control.Monad.Dep.SimpleAdvice.Advice' that doesn't require 'Control.Monad.Dep.DepT' at all. 
 toSimple :: Monad m => Advice ca NilEnv m r -> SA.Advice ca m r
-toSimple (Advice proxy withArgs withAction) = SA.Advice proxy 
-    (\args -> SA.AspectT $ flip runDepT NilEnv $ withArgs args) 
-    (\u (SA.AspectT action) -> SA.AspectT . flip runDepT NilEnv . withAction u $ lift action) 
+toSimple (Advice f) = SA.Advice \args -> lift do
+    (withExecution, args') <- f args `runDepT` NilEnv
+    let withExecution' = lift . flip runDepT NilEnv . withExecution . lift . SA.runAspectT
+    pure (withExecution', args')
 
 
 data SomeTweakAction e_ m r where
