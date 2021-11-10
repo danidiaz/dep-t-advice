@@ -7,6 +7,7 @@
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BlockArguments #-}
 
 
 -- |
@@ -162,22 +163,18 @@ instance Eq AnyEq where
 -- A better implementation of this advice would likely use an @AnyHashable@
 -- helper datatype for the keys.
 doCachingBadly :: forall e_ m r. Monad m => (AnyEq -> m (Maybe r)) -> (AnyEq -> r -> m ()) -> Advice (Eq `And` Typeable) e_ m r
-doCachingBadly cacheLookup cachePut =
-  makeAdvice @AnyEq
-    ( \args ->
+doCachingBadly cacheLookup cachePut = makeAdvice \args ->
         let key = AnyEq $ cfoldMap_NP (Proxy @(And Eq Typeable)) (\(I a) -> [AnyEq a]) $ args
-         in pure (key, args)
-    )
-    ( \key action -> do
-        mr <- lift $ cacheLookup key
-        case mr of
-          Nothing -> do
-            r <- action
-            lift $ cachePut key r
-            pure r
-          Just r ->
-            pure r
-    )
+            tweakExecution action = do
+                mr <- lift $ cacheLookup key
+                case mr of
+                  Nothing -> do
+                    r <- action
+                    lift $ cachePut key r
+                    pure r
+                  Just r ->
+                    pure r
+         in pure (tweakExecution, args)
 
 -- | Makes functions that return `()` launch asynchronously.
 --

@@ -104,7 +104,7 @@ module Control.Monad.Dep.Advice
     deceiveRecord,
     -- * Plugging Has-based constructors
     component,
-    distributeDepT,
+    --distributeDepT,
 
     -- * Interfacing with "simple" advices
     toSimple,
@@ -722,13 +722,13 @@ deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 -- | Having a 'DepT' action that returns a record-of-functions with effects in
 -- 'DepT' is the same as having the record itself, because we can obtain the initial
 -- environment by 'ask'ing for it in each member function.
-distributeDepT 
-    :: forall e_ m record . DistributiveRecord e_ m record => 
-    -- | 'DepT' action that returns the component
-    DepT e_ m (record (DepT e_ m)) ->
-    -- | component whose methods get the environment by 'ask'ing.
-    record (DepT e_ m)
-distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
+-- distributeDepT 
+--     :: forall e_ m record . DistributiveRecord e_ m record => 
+--     -- | 'DepT' action that returns the component
+--     DepT e_ m (record (DepT e_ m)) ->
+--     -- | component whose methods get the environment by 'ask'ing.
+--     record (DepT e_ m)
+-- distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
 
 -- | Given a constructor that returns a record-of-functions with effects in 'DepT',
 -- produce a record in which the member functions 'ask' for the environment themselves.
@@ -981,15 +981,11 @@ data SomeTweakAction e_ m r where
 
 -- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
 fromSimple :: forall ca e_ m r. Monad m => (forall n . Monad n => e_ n -> SA.Advice ca n r) -> Advice ca e_ m r
-fromSimple f =
-    Advice 
-        (Proxy @(SomeTweakAction e_ m r)) 
-        (\args -> do
-            env <- ask
-            case f env of
-                SA.Advice proxy tweakArgs tweakAction -> do
-                    let dtweakedArgs = SA.runAspectT $ tweakArgs args
-                    first (SomeTweakAction . coerce . tweakAction) <$> dtweakedArgs)
-        (\(SomeTweakAction withAction) da -> withAction da)
-
+fromSimple makeAdvice = Advice \args -> do
+    env <- ask
+    case makeAdvice env of
+        SA.Advice f -> do
+            let SA.AspectT argsAction = f args
+            (tweakExecution, args') <- argsAction
+            pure (coerce tweakExecution, args')
 
