@@ -975,12 +975,8 @@ toSimple (Advice f) = SA.Advice \args -> lift do
     let withExecution' = lift . flip runDepT NilEnv . withExecution . lift . SA.runAspectT
     pure (withExecution', args')
 
-
-data SomeTweakAction e_ m r where
-    SomeTweakAction :: (DepT e_ m r -> DepT e_ m r) -> SomeTweakAction e_ m r
-
 -- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
-fromSimple :: forall ca e_ m r. Monad m => (forall n . Monad n => e_ n -> SA.Advice ca n r) -> Advice ca e_ m r
+fromSimple :: forall ca e_ m r. Monad m => (e_ (DepT e_ m) -> SA.Advice ca (DepT e_ m) r) -> Advice ca e_ m r
 fromSimple makeAdvice = Advice \args -> do
     env <- ask
     case makeAdvice env of
