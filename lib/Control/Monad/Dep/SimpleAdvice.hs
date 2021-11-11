@@ -49,7 +49,7 @@
 --
 -- >>> :{
 --    env' :: Env IO
---    env' = env & advising (adviseRecord @_ @Top \_ -> printArgs stdout "prefix> ")
+--    env' = env & advising (adviseRecord @_ @Top \_ -> printArgs stdout "prefix ")
 -- :}
 --
 -- using the 'Control.Monad.Dep.SimpleAdvice.Basic.printArgs' advice. 
@@ -59,7 +59,7 @@
 -- >>> :{
 --    env' :: Env IO
 --    env' = env & advising \env -> env { 
---          bar = advise (printArgs stdout "prefix> ") (bar env)
+--          bar = advise (printArgs stdout "prefix ") (bar env)
 --      } 
 -- :}
 --
@@ -184,6 +184,7 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 --
 makeAdvice ::
   forall ca m r.
+    -- | The function that tweaks the arguments and the execution.
     ( forall as.
       All ca as =>
       NP I as ->
@@ -273,7 +274,9 @@ advise (Advice f) advisee = do
 -- 'Advice's uses 'AspectT' as a \"mark\" to recognize \"the end of the function\".
 advising 
     :: Coercible (r_ m) (r_ (AspectT m))
+    -- | transform the record coerced to 'AspectT', for example using 'adviseRecord'
     => (r_ (AspectT m) -> r_ (AspectT m))
+    -- | transform the original record
     -> r_ m -> r_ m
 advising f = coerce . f . coerce
 

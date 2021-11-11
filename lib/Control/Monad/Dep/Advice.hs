@@ -235,7 +235,7 @@ instance Monad m => Monoid (Advice ca e_ m r) where
 --
 makeAdvice ::
   forall ca e_ m r.
-  -- | The function that tweaks the arguments.
+  -- | The function that tweaks the arguments and the execution.
   ( forall as.
     All ca as =>
     NP I as ->
