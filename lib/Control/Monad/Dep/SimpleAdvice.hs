@@ -70,6 +70,9 @@
 --
 -- - Unlike in "Control.Monad.Dep.Advice", we can advise components
 --   which work on a fixed concrete monad like 'IO'.
+--
+-- Compared with "Control.Monad.Dep.Advice", it does require the extra step
+-- of invoking the 'advising' helper function.
 module Control.Monad.Dep.SimpleAdvice
   ( -- * Preparing components for being advised
     advising,
