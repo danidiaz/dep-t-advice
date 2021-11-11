@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE BlockArguments #-}
 
 module Main (main) where
 
@@ -198,17 +199,16 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 -- Experiment about adding instrumetation
 
 doLogging :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
-doLogging = makeAdvice @()
-        (\args -> do
-            e <- ask
-            let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
-            logger e $ "advice before: " ++ intercalate "," args'
-            pure (pure args))
-        (\() action -> do 
+doLogging = makeAdvice \args -> do
+    e <- ask
+    let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
+    logger e $ "advice before: " ++ intercalate "," args'
+    let tweakExecution action = do
             e <- ask
             r <- action
             logger e $ "advice after"
-            pure r)
+            pure r
+    pure (tweakExecution,  args)
 
 advicedEnv :: Env (DepT Env (Writer TestTrace))
 advicedEnv =
@@ -223,9 +223,9 @@ expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm g
 weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
 weirdAdvicedEnv =
    env {
-         _controller = advise (doLogging <> returnMempty) (_controller env), --,
+         _controller = advise (doLogging <> fromSimple \_ -> returnMempty) (_controller env), --,
          -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
-         _logger = advise @(Show `And` Eq) (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
+         _logger = advise @(Show `And` Eq) (makeAdvice (\args -> pure (id, args))) (_logger env)
        }
 
 -- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
@@ -249,15 +249,16 @@ doLogging'' = doLogging <> justARepositoryConstraint
 
 -- Checking that constraints on the results are collected "automatically"
 returnMempty' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
-returnMempty' = returnMempty
+returnMempty' = fromSimple \_ -> returnMempty
 
 justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => Advice ca e m r
 justAResultConstraint = mempty
 
 returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
-returnMempty'' = returnMempty <> justAResultConstraint
+returnMempty'' = fromSimple (\_ -> returnMempty) <> justAResultConstraint
 
-printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @NilEnv @IO stdout "foo")
+printArgs' :: Advice (Eq `And` Ord `And` Show) e_ IO ()
+printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
  
 -- does EnvConstraint compile?
 
@@ -299,18 +300,18 @@ cacheTestLogic = do
 
 type ExpensiveComputationMonad = RWS () ([String],()) [(AnyEq,String)]
 
-cacheLookup :: AnyEq -> ExpensiveComputationMonad (Maybe String)
+cacheLookup :: MonadState [(AnyEq,String)] m => AnyEq -> m (Maybe String)
 cacheLookup key = do
     cache <- get
     pure $ lookup key cache
 
-cachePut :: AnyEq -> String -> ExpensiveComputationMonad ()
+cachePut :: MonadState [(AnyEq,String)] m => AnyEq -> String -> m ()
 cachePut key v = modify ((key,v) :)
 
 cacheTestEnv :: CachingTestEnv (DepT CachingTestEnv ExpensiveComputationMonad)
 cacheTestEnv = CachingTestEnv {
         _cacheTestLogic = cacheTestLogic,
-        _expensiveComputation = advise (doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
+        _expensiveComputation = advise (fromSimple \_ -> doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
         _logger2 = mkFakeLogger
     }
 
