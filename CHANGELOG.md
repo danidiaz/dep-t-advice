@@ -1,11 +1,12 @@
 # Revision history for dep-t-advice
 
-## 0.4.8.0 
+## 0.5.0.0 
 
-* Added 'Control.Monad.Dep.SimpleAdvice'.
-* Slightly tweaked the signature for "doLocally", adding a monad constraint.
-  Technically a breaking change, however, "doLocally" was almost completely
-  useless without it.
+* The Advice type has changed to get rid of the existential type.
+  This breas the more general 'makeAdvice' function.   
+* Added 'Control.Monad.Dep.SimpleAdvice' and 'Control.Monad.Dep.SimpleAdvice.Basic'.
+* Moved some "basic" advices.
+* Removed distributeDepT.
 
 ## 0.4.7.0 
 

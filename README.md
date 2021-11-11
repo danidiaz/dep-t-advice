@@ -118,6 +118,12 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
+## What about `Control.Monad.Dep.SimpleAdvice`?
+
+The main `Control.Monad.Dep.Advice` module works with the `DepT` monad, but that is a bit too limited and specialized. What if I want to use plain `IO` as the monad which parameterizes my record-of-functions?
+
+
+
 ## Historical aside
 
 According to Wikipedia, the term "advice" in the sense of aspect-oriented

@@ -26,12 +26,12 @@
 --
 -- __NOTE__:
 --
--- This modue is an alternative to "Control.Monad.Dep.Advice" with two advantages:
+-- This module is an alternative to "Control.Monad.Dep.Advice" with two advantages:
 --
 -- - It doesn't use 'Control.Monad.Dep.DepT'. The types are simpler because
 --   they don't need to refer to 'Control.Monad.Dep.DepT''s environment.
 --
--- - Unlike in "Control.Monad.Dep.Advice", we can advise functions / components
+-- - Unlike in "Control.Monad.Dep.Advice", we can advise components
 --   which work on a fixed concrete monad like 'IO'.
 module Control.Monad.Dep.SimpleAdvice
   ( -- * Preparing components for being advised
@@ -157,8 +157,6 @@ makeAdvice = Advice
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
 --
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
---
 -- >>> :{
 --  doesNothing :: forall ca m r. Monad m => Advice ca m r
 --  doesNothing = makeArgsAdvice pure
@@ -180,8 +178,6 @@ makeArgsAdvice tweakArgs =
 
 -- |
 --    Create an advice which only tweaks the execution of the final monadic action.
---
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
 --  doesNothing :: forall ca m r. Monad m => Advice ca m r

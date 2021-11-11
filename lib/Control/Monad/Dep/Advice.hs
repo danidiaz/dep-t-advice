@@ -251,8 +251,6 @@ makeAdvice = Advice
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
 --
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
---
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
 --  doesNothing = makeArgsAdvice pure
@@ -274,8 +272,6 @@ makeArgsAdvice tweakArgs =
 
 -- |
 --    Create an advice which only tweaks the execution of the final monadic action.
---
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
