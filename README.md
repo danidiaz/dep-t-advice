@@ -120,9 +120,18 @@ the full gamut of functionality stored in the environment.
 
 ## What about `Control.Monad.Dep.SimpleAdvice`?
 
-The main `Control.Monad.Dep.Advice` module works with the `DepT` monad, but that is a bit too limited and specialized. What if I want to use plain `IO` as the monad which parameterizes my record-of-functions?
+`Advice`s form `Control.Monad.Dep.Advice` work with the `DepT` monad, but
+that's a bit too specialized. What if I want to use plain `IO` as the monad
+which parameterizes my record-of-functions?
 
+`Control.Monad.Dep.SimpleAdvice` provides a version of the `Advice` type that
+works with records-of-functions parameterized with `IO` or other concrete
+monads. 
 
+This simpler `Advice` can be useful when performing dependency injection
+through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.4.6.0/docs/Control-Monad-Dep-Env.html#g:9).
+
+There are conversion functions between the two versions of `Advice`.
 
 ## Historical aside
 
