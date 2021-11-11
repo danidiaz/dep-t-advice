@@ -51,8 +51,8 @@ import Control.Concurrent
 -- >>> :set -XBlockArguments
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
--- >>> import Control.Monad.Dep.Advice
--- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Dep.SimpleAdvice
+-- >>> import Control.Monad.Dep.SimpleAdvice.Basic (printArgs,returnMempty)
 -- >>> import Data.Kind
 -- >>> import Data.SOP
 -- >>> import Data.SOP.NP

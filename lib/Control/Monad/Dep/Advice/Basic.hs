@@ -49,7 +49,7 @@ import Control.Concurrent
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
--- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Dep.Advice.Basic
 -- >>> import Data.Kind
 -- >>> import Data.SOP
 -- >>> import Data.SOP.NP

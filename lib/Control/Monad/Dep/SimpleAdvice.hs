@@ -23,55 +23,6 @@
 {-# LANGUAGE BlockArguments #-}
 
 -- | 
--- This module provides the 'Advice' datatype, along for functions for creating,
--- manipulating, composing and applying values of that type.
---
--- 'Advice's represent generic transformations on effectful functions of
--- any number of arguments.
---
--- >>> :{
---    foo0 :: DepT NilEnv IO (Sum Int)
---    foo0 = pure (Sum 5)
---    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
---    foo1 _ = foo0
---    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
---    foo2 _ = foo1
--- :}
---
--- They work for monadic actions of zero arguments:
---
--- >>> advise (printArgs stdout "foo0") foo0 `runDepT` NilEnv
--- foo0:
--- <BLANKLINE>
--- Sum {getSum = 5}
---
--- And for functions of one or more arguments, provided they end on a monadic action:
---
--- >>> advise (printArgs stdout "foo1") foo1 False `runDepT` NilEnv
--- foo1: False
--- <BLANKLINE>
--- Sum {getSum = 5}
---
--- >>> advise (printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
--- foo2: 'd' False
--- <BLANKLINE>
--- Sum {getSum = 5}
---
--- 'Advice's can also tweak the result value of functions:
---
--- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
--- Sum {getSum = 0}
---
--- And they can be combined using @Advice@'s 'Monoid' instance before being
--- applied:
---
--- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
--- foo2: 'd' False
--- <BLANKLINE>
--- Sum {getSum = 0}
---
--- Although sometimes composition might require harmonizing the constraints
--- each 'Advice' places on the arguments, if they differ.
 --
 -- __NOTE__:
 --
@@ -160,8 +111,8 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 -- >>> :set -XImportQualifiedPost
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
--- >>> import Control.Monad.Dep.Advice
--- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Dep.SimpleAdvice
+-- >>> import Control.Monad.Dep.SimpleAdvice.Basic (printArgs,returnMempty)
 -- >>> import Control.Monad.Writer
 -- >>> import Data.Kind
 -- >>> import Data.SOP
@@ -188,13 +139,11 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 --    type @u@ calculated earlier.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
---  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
+--  doesNothing :: forall ca m r. Monad m => Advice ca m r
+--  doesNothing = makeAdvice (\args -> pure (id, args)) 
 -- :}
 --
---    __/TYPE APPLICATION REQUIRED!/__ When invoking 'makeAdvice', you must always give the
---    type of the existential @u@ through a type application. Otherwise you'll
---    get weird \"u is untouchable\" errors.
+--
 makeAdvice ::
   forall ca m r.
     ( forall as.
@@ -211,7 +160,7 @@ makeAdvice = Advice
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca m r. Monad m => Advice ca m r
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
@@ -235,7 +184,7 @@ makeArgsAdvice tweakArgs =
 --    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca m r. Monad m => Advice ca m r
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
@@ -253,7 +202,7 @@ makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, a
 -- effects in 'AspectT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
---  foo :: Int -> AspectT NilEnv IO String
+--  foo :: Int -> AspectT IO String
 --  foo _ = pure "foo"
 --  advisedFoo = advise (printArgs stdout "Foo args: ") foo
 -- :}
@@ -262,7 +211,7 @@ makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, a
 -- it must be supplied by means of a type application:
 --
 -- >>> :{
---  bar :: Int -> AspectT NilEnv IO String
+--  bar :: Int -> AspectT IO String
 --  bar _ = pure "bar"
 --  advisedBar1 = advise (returnMempty @Top) bar
 --  advisedBar2 = advise @Top returnMempty bar
@@ -332,7 +281,7 @@ instance Multicurryable as m r curried => Multicurryable (a ': as) m r (a -> cur
 --    enough type information to the GADT, be it as an explicit signature:
 --
 -- >>> :{
---  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
+--  stricterPrintArgs :: forall m r. MonadIO m => Advice (Show `And` Eq `And` Ord) m r
 --  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --

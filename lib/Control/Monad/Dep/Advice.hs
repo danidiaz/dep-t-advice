@@ -37,32 +37,32 @@
 --
 -- They work for @DepT@-actions of zero arguments:
 --
--- >>> advise (printArgs stdout "foo0") foo0 `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo0") foo0 `runDepT` NilEnv
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- And for functions of one or more arguments, provided they end on a @DepT@-action:
 --
--- >>> advise (printArgs stdout "foo1") foo1 False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo1") foo1 False `runDepT` NilEnv
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> advise (printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> returnMempty @Top) foo2 'd' False `runDepT` NilEnv
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being
 -- applied:
 --
--- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
@@ -159,7 +159,7 @@ import Control.Monad.Dep.SimpleAdvice.Internal qualified as SA
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
--- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Dep.SimpleAdvice.Basic (printArgs,returnMempty)
 -- >>> import Control.Monad.Writer
 -- >>> import Data.Kind
 -- >>> import Data.SOP
@@ -233,12 +233,10 @@ instance Monad m => Monoid (Advice ca e_ m r) where
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
---  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
+--  doesNothing = makeAdvice (\args -> pure (id,  args)) 
 -- :}
 --
---    __/TYPE APPLICATION REQUIRED!/__ When invoking 'makeAdvice', you must always give the
---    type of the existential @u@ through a type application. Otherwise you'll
---    get weird \"u is untouchable\" errors.
+--
 makeAdvice ::
   forall ca e_ m r.
   -- | The function that tweaks the arguments.
@@ -333,7 +331,7 @@ type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m))
 -- >>> :{
 --  foo :: Int -> DepT NilEnv IO String
 --  foo _ = pure "foo"
---  advisedFoo = advise (printArgs stdout "Foo args: ") foo
+--  advisedFoo = advise (fromSimple \_ -> printArgs stdout "Foo args: ") foo
 -- :}
 --
 -- __/TYPE APPLICATION REQUIRED!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
@@ -342,8 +340,8 @@ type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m))
 -- >>> :{
 --  bar :: Int -> DepT NilEnv IO String
 --  bar _ = pure "bar"
---  advisedBar1 = advise (returnMempty @Top) bar
---  advisedBar2 = advise @Top returnMempty bar
+--  advisedBar1 = advise (fromSimple \_ -> returnMempty @Top) bar
+--  advisedBar2 = advise @Top (fromSimple \_ -> returnMempty) bar
 -- :}
 advise ::
   forall ca e_ m r as advisee.
@@ -442,7 +440,7 @@ askFinalDepT = _askFinalDepT @as @e_ @m @r
 --      let foo' = runFromEnv (readIORef envRef) _foo
 --      do r <- foo' 7
 --         print r
---      modifyIORef envRef (\e -> e { _foo = advise @Top returnMempty (_foo e) })
+--      modifyIORef envRef (\e -> e { _foo = advise @Top (fromSimple \_ -> returnMempty) (_foo e) })
 --      do r <- foo' 7
 --         print r
 -- :}
@@ -494,12 +492,12 @@ runFromDep envAction member = _runFromEnv envAction (member . dep)
 --
 -- >>> :{
 --  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
---  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
+--  stricterPrintArgs = restrictArgs (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
 -- :}
 --
 --    or with a type application to 'restrictArgs':
 --
--- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
+-- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -718,17 +716,6 @@ deceiveRecord ::
   gullible (DepT e_ m)
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
-
--- | Having a 'DepT' action that returns a record-of-functions with effects in
--- 'DepT' is the same as having the record itself, because we can obtain the initial
--- environment by 'ask'ing for it in each member function.
--- distributeDepT 
---     :: forall e_ m record . DistributiveRecord e_ m record => 
---     -- | 'DepT' action that returns the component
---     DepT e_ m (record (DepT e_ m)) ->
---     -- | component whose methods get the environment by 'ask'ing.
---     record (DepT e_ m)
--- distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
 
 -- | Given a constructor that returns a record-of-functions with effects in 'DepT',
 -- produce a record in which the member functions 'ask' for the environment themselves.
