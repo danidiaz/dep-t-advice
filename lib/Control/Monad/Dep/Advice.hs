@@ -23,7 +23,7 @@
 --    This module provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
---    'Advice's represent generic transformations on 'DepT'-effectful functions of
+--    'Advice's are type-preserving transformations on 'DepT'-effectful functions of
 --    any number of arguments.
 --
 -- >>> :{
@@ -171,9 +171,9 @@ import Control.Monad.Dep.SimpleAdvice.Internal qualified as SA
 -- >>> import GHC.Generics qualified
 
 -- | A generic transformation of 'DepT'-effectful functions with environment
--- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
--- provided the functions satisfy certain constraint @ca@ of kind @Type ->
--- Constraint@ on all of their arguments.
+-- @e_@, base monad @m@ and return type @r@,
+-- provided the functions satisfy certain constraint @ca@
+-- on all of their arguments.
 --
 -- Note that the type constructor for the environment @e_@ is given unapplied.
 -- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
@@ -191,7 +191,7 @@ type Advice ::
   (Type -> Type) ->
   Type ->
   Type
-data Advice ca e_ m r where
+data Advice (ca :: Type -> Constraint) (e_ :: (Type -> Type) -> Type) m r where
   Advice ::
     forall ca e_ m r.
     ( forall as.
@@ -218,7 +218,7 @@ instance Monad m => Monoid (Advice ca e_ m r) where
   mempty = Advice \args -> pure (id, args)
 
 -- |
---    The most general (and complex) way of constructing 'Advice's.
+--    The most general way of constructing 'Advice's.
 --
 --    An 'Advice' is a function that transforms other functions in an 
 --    arity-polymorphic way. It receives the arguments of the advised
@@ -954,7 +954,7 @@ toSimple (Advice f) = SA.Advice \args -> lift do
     let withExecution' = lift . flip runDepT NilEnv . withExecution . lift . SA.runAspectT
     pure (withExecution', args')
 
--- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' which doesn't directly use the underlying monad @m@ into an 'Advice'.
+-- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' whose monad unifies with `DepT e_ m` into an 'Advice'.
 fromSimple :: forall ca e_ m r. Monad m => (e_ (DepT e_ m) -> SA.Advice ca (DepT e_ m) r) -> Advice ca e_ m r
 fromSimple makeAdvice = Advice \args -> do
     env <- ask

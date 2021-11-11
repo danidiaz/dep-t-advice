@@ -52,7 +52,9 @@
 --    env' = env & advising (adviseRecord @_ @Top \_ -> printArgs stdout "prefix> ")
 -- :}
 --
--- or an individual function in this way:
+-- using the 'Control.Monad.Dep.SimpleAdvice.Basic.printArgs' advice. 
+--
+-- Or modify an individual function in this way:
 --
 -- >>> :{
 --    env' :: Env IO
@@ -72,7 +74,7 @@
 --   which work on a fixed concrete monad like 'IO'.
 --
 -- Compared with "Control.Monad.Dep.Advice", it does require the extra step
--- of invoking the 'advising' helper function.
+-- of invoking the 'advising' helper function on a record-of-functions.
 module Control.Monad.Dep.SimpleAdvice
   ( -- * Preparing components for being advised
     advising,
@@ -166,7 +168,7 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 
 
 -- |
---    The most general (and complex) way of constructing 'Advice's.
+--    The most general way of constructing 'Advice's.
 --
 --    An 'Advice' receives the arguments of the advised
 --    function packed into an n-ary product 'NP', performs some 

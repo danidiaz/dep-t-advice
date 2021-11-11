@@ -50,19 +50,21 @@ import Control.Monad.Zip
 
 -- | A generic transformation of 'AspectT'-effectful functions with 
 -- base monad @m@ and return type @r@,
--- provided the functions satisfy certain constraint @ca@ of kind @Type ->
--- Constraint@ on all of their arguments.
+-- provided the functions satisfy certain constraint @ca@
+-- on all of their arguments.
 --
 -- 'Advice's that don't care about the @ca@ constraint (because they don't
 -- touch function arguments) can leave it polymorphic, and this facilitates
 -- 'Advice' composition, but then the constraint must be given the catch-all
 -- `Top` value (using a type application) at the moment of calling 'advise'.
+--
+-- See "Control.Monad.Dep.SimpleAdvice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
   (Type -> Type) ->
   Type ->
   Type
-data Advice ca m r where
+data Advice (ca :: Type -> Constraint) m r where
   Advice ::
     forall ca m r.
     ( forall as.
