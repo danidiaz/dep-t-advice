@@ -23,6 +23,43 @@
 {-# LANGUAGE BlockArguments #-}
 
 -- | 
+--    This module provides the 'Advice' datatype, along for functions for creating,
+--    manipulating, composing and applying values of that type.
+--
+--    'Advice's are type-preserving transformations on effectful functions of
+--    any number of arguments.
+--
+--    For example, assuming we have a record-of-functions like
+--
+-- >>> :{
+--    data Env m = Env {
+--      foo :: m ()
+--    , bar :: Int -> m (Maybe Char)
+--    , baz :: Int -> Bool -> m Char
+--    } deriving Generic
+--    env :: Env IO
+--    env = Env {
+--      foo = pure ()
+--    , bar = \_ -> pure (Just 'c')
+--    , baz = \_ _ -> pure 'i'
+--    }
+-- :}
+--
+-- We can modify all the functions in the record in this way:
+--
+-- >>> :{
+--    env' :: Env IO
+--    env' = env & advising (adviseRecord @_ @Top \_ -> printArgs stdout "prefix> ")
+-- :}
+--
+-- or an individual function in this way:
+--
+-- >>> :{
+--    env' :: Env IO
+--    env' = env & advising \env -> env { 
+--          bar = advise (printArgs stdout "prefix> ") (bar env)
+--      } 
+-- :}
 --
 -- __NOTE__:
 --
@@ -122,21 +159,17 @@ import Control.Monad.Dep.SimpleAdvice.Internal
 -- >>> import Data.IORef
 -- >>> import GHC.Generics (Generic)
 -- >>> import GHC.Generics qualified
+-- >>> import Data.Function
 
 
 -- |
 --    The most general (and complex) way of constructing 'Advice's.
 --
---    'Advice's work in two phases. First, the arguments of the transformed
---    function are collected into an n-ary product 'NP', and passed to the
---    first argument of 'makeAdvice', which produces a (possibly transformed)
---    product of arguments, along with some summary value of type @u@. Use @()@
---    as the summary value if you don't care about it.
---
---    In the second phase, the monadic action produced by the function once all
---    arguments have been given is transformed using the second argument of
---    'makeAdvice'. This second argument also receives the summary value of
---    type @u@ calculated earlier.
+--    An 'Advice' receives the arguments of the advised
+--    function packed into an n-ary product 'NP', performs some 
+--    effects based on them, and returns a potentially modified version of the 
+--    arguments, along with a function for tweaking the execution of the
+--    advised function.
 --
 -- >>> :{
 --  doesNothing :: forall ca m r. Monad m => Advice ca m r

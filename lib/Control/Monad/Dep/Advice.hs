@@ -220,16 +220,12 @@ instance Monad m => Monoid (Advice ca e_ m r) where
 -- |
 --    The most general (and complex) way of constructing 'Advice's.
 --
---    'Advice's work in two phases. First, the arguments of the transformed
---    function are collected into an n-ary product 'NP', and passed to the
---    first argument of 'makeAdvice', which produces a (possibly transformed)
---    product of arguments, along with some summary value of type @u@. Use @()@
---    as the summary value if you don't care about it.
---
---    In the second phase, the monadic action produced by the function once all
---    arguments have been given is transformed using the second argument of
---    'makeAdvice'. This second argument also receives the summary value of
---    type @u@ calculated earlier.
+--    An 'Advice' is a function that transforms other functions in an 
+--    arity-polymorphic way. It receives the arguments of the advised
+--    function packed into an n-ary product 'NP', performs some 
+--    effects based on them, and returns a potentially modified version of the 
+--    arguments, along with a function for tweaking the execution of the
+--    advised function.
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
