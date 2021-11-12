@@ -33,6 +33,8 @@ import Control.Monad.Dep.SimpleAdvice.Basic
 import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
+import Data.List.NonEmpty 
+import Data.Typeable
 import Data.Coerce
 import Data.Functor.Identity
 import Data.Kind
@@ -88,6 +90,28 @@ printAdvisedFoo ref =
     advising (adviseRecord @_ @Top (\_ -> printArgs stdout "args: ")) (concreteFoo ref)
 
 --
+-- Stuff for testing the TypeReps in adviseRecord
+data AAA m = AAA { aaa :: BBB m } deriving Generic
+data BBB m = BBB { bbb :: CCC m } deriving Generic
+data CCC m = CCC { ccc :: Int -> Bool ->  m () } deriving Generic
+
+type Trace = Writer [(TypeRep, String)]
+
+tracedEnv :: AAA Trace
+tracedEnv = AAA {
+        aaa = BBB {
+            bbb = CCC { 
+               ccc = \_ _ -> pure () 
+            }
+        }
+    }
+
+doTrace :: NonEmpty (TypeRep, String) -> Advice ca Trace r
+doTrace trace = makeExecutionAdvice \action -> do
+    tell (toList trace) 
+    action
+
+--
 --
 tests :: TestTree
 tests =
@@ -112,6 +136,15 @@ tests =
         () <- runFoo (printAdvisedFoo ref) 0 False
         result <- readIORef ref
         assertEqual "" ["foo"] result
+    , testCase "trace" $ do
+        let tracedEnv' = advising (adviseRecord @Top @Top doTrace) tracedEnv
+            result = execWriter $ (ccc . bbb . aaa) tracedEnv' 0 False
+            expected = [
+                  (typeRep (Proxy @CCC), "ccc")
+                , (typeRep (Proxy @BBB), "bbb")
+                , (typeRep (Proxy @AAA), "aaa")
+                ]
+        assertEqual "" expected result
     ]
 
 main :: IO ()

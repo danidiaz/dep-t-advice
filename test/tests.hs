@@ -14,6 +14,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main (main) where
 
@@ -33,6 +34,9 @@ import Test.Tasty.HUnit
 import Prelude hiding (log)
 import Data.Proxy
 import System.IO
+import Data.List.NonEmpty
+import Data.Typeable
+import GHC.Generics
 
 -- Some helper typeclasses.
 --
@@ -318,6 +322,29 @@ cacheTestEnv = CachingTestEnv {
 expectedCached :: ([String],())
 expectedCached = (["Doing expensive computation","0False","Doing expensive computation","1True","0False","1True"],())
 
+
+--
+-- Stuff for testing the TypeReps in adviseRecord
+data AAA m = AAA { aaa :: BBB m } deriving Generic
+data BBB m = BBB { bbb :: CCC m } deriving Generic
+data CCC m = CCC { ccc :: Int -> Bool ->  m () } deriving Generic
+
+type Trace = Writer [(TypeRep, String)]
+
+tracedEnv :: AAA (DepT AAA Trace)
+tracedEnv = AAA {
+        aaa = BBB {
+            bbb = CCC { 
+               ccc = \_ _ -> pure () 
+            }
+        }
+    }
+
+doTrace :: MonadWriter [(TypeRep, String)] m => NonEmpty (TypeRep, String) -> Advice ca AAA m r
+doTrace trace = makeExecutionAdvice \action -> do
+    tell (toList trace) 
+    action
+
 --
 --
 --
@@ -328,15 +355,24 @@ tests =
     "All"
     [ testCase "hopeThisWorks" $
         assertEqual "" expected $
-          execWriter $ runDepT (do e <- ask; (_controller . _inner) e 7) biggerEnv,
-      testCase "hopeAOPWorks" $
+          execWriter $ runDepT (do e <- ask; (_controller . _inner) e 7) biggerEnv
+    , testCase "hopeAOPWorks" $
         assertEqual "" expectedAdviced $
-          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv,
-      testCase "hopeCachingWorks" $
+          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv
+    , testCase "hopeCachingWorks" $
         assertEqual "" expectedCached $
           let action = runFromEnv (pure cacheTestEnv) _cacheTestLogic 
               (_,w) = execRWS action () mempty
            in w
+    , testCase "trace" $ do
+        let tracedEnv' = adviseRecord @Top @Top doTrace tracedEnv
+            result = execWriter $ runFromEnv (pure tracedEnv') (ccc . bbb . aaa) 0 False
+            expected = [
+                  (typeRep (Proxy @CCC), "ccc")
+                , (typeRep (Proxy @BBB), "bbb")
+                , (typeRep (Proxy @AAA), "aaa")
+                ]
+        assertEqual "" expected result
     ]
 
 main :: IO ()

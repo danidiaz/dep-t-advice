@@ -443,7 +443,7 @@ instance
 -- which represent the record types and fields names we have
 -- traversed until arriving at the advised function. This info can be useful for
 -- logging advices. It's a list instead of a single tuple because
--- 'adviseRecord' works recursively.
+-- 'adviseRecord' works recursively. The elements come innermost-first.
 --
 -- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
 -- and the @cr@ constraint on the result type must be supplied by means of a
