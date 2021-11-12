@@ -274,11 +274,11 @@ advise (Advice f) advisee = do
 -- This is necessary because the typeclass machinery which handles
 -- 'Advice's uses 'AspectT' as a \"mark\" to recognize \"the end of the function\".
 advising 
-    :: Coercible (r_ m) (r_ (AspectT m))
+    :: Coercible (r_ m) (r_ (AspectT m)) =>
     -- | transform the record coerced to 'AspectT', for example using 'adviseRecord'
-    => (r_ (AspectT m) -> r_ (AspectT m))
+    (r_ (AspectT m) -> r_ (AspectT m)) ->
     -- | transform the original record
-    -> r_ m -> r_ m
+    r_ m -> r_ m
 advising f = coerce . f . coerce
 
 type Multicurryable ::
