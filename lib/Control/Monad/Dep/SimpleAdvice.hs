@@ -120,6 +120,7 @@ import Data.List.NonEmpty qualified as N
 import Data.SOP
 import Data.SOP.Dict
 import Data.SOP.NP
+import Data.List.NonEmpty
 import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
@@ -357,11 +358,11 @@ restrictArgs evidence (Advice advice) = Advice \args ->
 --
 type AdvisedRecord :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
 class AdvisedRecord ca m cr advised where
-  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised (AspectT m) -> advised (AspectT m)
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca m r) -> advised (AspectT m) -> advised (AspectT m)
 
 type AdvisedProduct :: (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
 class AdvisedProduct ca m cr advised_ where
-  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised_ k -> advised_ k
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (AspectT m)),
@@ -400,7 +401,7 @@ type family DiscriminateAdvisedComponent c where
 
 type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
 class AdvisedComponent component_type ca m cr advised where
-  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca m r) -> advised -> advised
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca m r) -> advised -> advised
 
 instance
   ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised,
@@ -409,7 +410,7 @@ instance
   AdvisedProduct ca m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
   where
   _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
-    let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
+    let acc' = (tr, symbolVal (Proxy @fieldName)) : acc
      in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @m @cr acc' f advised))
 
 instance
@@ -422,7 +423,7 @@ instance
   (Multicurryable as m r advised, All ca as, cr r, Monad m) =>
   AdvisedComponent Terminal ca m cr advised
   where
-  _adviseComponent acc f advised = advise @ca @m (f acc) advised
+  _adviseComponent acc f advised = advise @ca @m (f (Data.List.NonEmpty.fromList acc)) advised
 
 instance
   AdvisedComponent (DiscriminateAdvisedComponent advised) ca m cr advised =>
@@ -451,7 +452,7 @@ adviseRecord ::
   forall ca cr m advised.
   AdvisedRecord ca m cr advised =>
   -- | The advice to apply.
-  (forall r . cr r => [(TypeRep, String)] -> Advice ca m r) ->
+  (forall r . cr r => NonEmpty (TypeRep, String) -> Advice ca m r) ->
   -- | The record to advise recursively.
   advised (AspectT m) ->
   -- | The advised record.
