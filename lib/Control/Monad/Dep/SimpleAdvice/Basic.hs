@@ -34,6 +34,7 @@ import Data.Type.Equality
 import System.IO
 import Type.Reflection
 import Control.Concurrent
+import Control.Monad.IO.Unlift
 
 -- $setup
 --
@@ -132,9 +133,9 @@ doCachingBadly cacheLookup cachePut = makeAdvice \args ->
 -- package instead of bare `forkIO`. 
 --
 -- The @IO@ monad could be generalized to @MonadUnliftIO@.
-doAsyncBadly :: forall ca . Advice ca IO ()
+doAsyncBadly :: forall ca m . MonadUnliftIO m => Advice ca m ()
 doAsyncBadly = makeExecutionAdvice \action -> do
-    _ <- liftIO $ forkIO $ runAspectT action
+    _ <- withRunInIO (\unlift -> forkIO (unlift action))
     pure ()
 
 
