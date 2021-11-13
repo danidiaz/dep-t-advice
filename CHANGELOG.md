@@ -8,6 +8,7 @@
 * Moved some "basic" advices.
 * Removed distributeDepT.
 * 'adviseRecord' now receives a 'NonEmpty' path-in-record, ordered innermost-first.
+* More flexible type for doLocally.
 
 ## 0.4.7.0 
 

@@ -102,7 +102,7 @@ import Control.Concurrent
 --  >>> runFromEnv (pure envIO) _controllerB 0
 --  logger2 ran
 --
-doLocally :: forall ca e_ m r. Monad m => (forall n. Monad n => e_ n -> e_ n) -> Advice ca e_ m r 
+doLocally :: forall ca e_ m r. Monad m => (e_ (DepT e_ m) -> e_ (DepT e_ m)) -> Advice ca e_ m r 
 doLocally transform = makeExecutionAdvice (local transform)  
 
 
