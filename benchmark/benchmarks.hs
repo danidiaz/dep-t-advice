@@ -34,9 +34,7 @@ import Data.Foldable
 --     )
 
 mempty' :: forall ca e m r. Monad m => Advice ca e m r
-mempty' = makeAdvice @()
-  (\args -> pure (pure args))
-  (\() -> id)
+mempty' = makeAdvice (\args -> pure (id, args))
 
 summy :: Monad m => Int -> Int -> Int -> Int -> DepT NilEnv m (Sum Int)
 summy a1 a2 a3 a4 = pure $ Sum a1 <> Sum a2 <> Sum a3 <> Sum a4
