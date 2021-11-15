@@ -118,6 +118,21 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
+## What about `Control.Monad.Dep.SimpleAdvice`?
+
+`Advice`s form `Control.Monad.Dep.Advice` work with the `DepT` monad, but
+that's a bit too specialized. What if I want to use plain `IO` as the monad
+which parameterizes my record-of-functions?
+
+`Control.Monad.Dep.SimpleAdvice` provides a version of the `Advice` type that
+works with records-of-functions parameterized with `IO` or other concrete
+monads. 
+
+This simpler `Advice` can be useful when performing dependency injection
+through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.4.6.0/docs/Control-Monad-Dep-Env.html#g:9).
+
+There are conversion functions between the two versions of `Advice`.
+
 ## Historical aside
 
 According to Wikipedia, the term "advice" in the sense of aspect-oriented
@@ -166,10 +181,6 @@ Symbiosis](http://publications.csail.mit.edu/ai/browse/0200browse.shtml):
 
 - [Using the “constraints” package to make a wrapped function less
   polymorphic](https://stackoverflow.com/questions/65800809/using-the-constraints-package-to-make-a-wrapped-function-less-polymorphic)
-
-- [Dependency Injection Principles, Practices, and
-  Patterns](https://www.goodreads.com/book/show/44416307-dependency-injection-principles-practices-and-patterns)
-  This is a good book on the general princples of DI. 
 
 - [variadic-function](https://hackage.haskell.org/package/variadic-function) a
   Hackage library which also deals with functions of any number of elements.

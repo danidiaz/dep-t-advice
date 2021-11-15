@@ -1,13 +1,19 @@
 cabal-version:       3.0
 
 name:                dep-t-advice
-version:             0.4.7.0
-synopsis:            Giving good advice to functions in a DepT environment.
-description:         Companion to the dep-t package. Easily add behaviour to functions living in a DepT environment, 
-                     whatever the number of arguments they might have.
+version:             0.5.0.0
+synopsis:            Giving good advice to functions in a record-of-functions.
+description:         
+                     Companion to the dep-t package. Easily add behaviour to
+                     functions living in a record-of-functions, whatever the
+                     number of arguments they might have.
                      
                      In other words: something like the "advices" of
                      aspect-oriented programming.
+
+                     Two flavors of advice are provided: one for environments
+                     parameterized by the DepT monad, and a simpler version for
+                     environments parameterized by IO and other monads.
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
@@ -24,7 +30,9 @@ common common
   build-depends:       base >=4.10.0.0 && < 5,
                        sop-core ^>= 0.5.0.0,
                        transformers ^>= 0.5.0.0,
-                       dep-t ^>= 0.4.6.0,
+                       dep-t ^>= 0.5.0.0,
+                       mtl ^>= 2.2,
+                       unliftio-core ^>= 0.2.0.0,
   default-language:    Haskell2010
 
 common common-tests
@@ -32,8 +40,8 @@ common common-tests
   build-depends:       
                        dep-t-advice, 
                        rank2classes       ^>= 1.4.1,
-                       transformers       ^>= 0.5.0.0,
-                       mtl                ^>= 2.2,
+                       -- transformers       ^>= 0.5.0.0,
+                       -- mtl                ^>= 2.2,
                        template-haskell,
                        text,
 
@@ -48,6 +56,10 @@ library
   import: common
   exposed-modules:     Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advice.Basic
+                       Control.Monad.Dep.SimpleAdvice
+                       Control.Monad.Dep.SimpleAdvice.Basic
+  other-modules:       Control.Monad.Dep.SimpleAdvice.Internal    
+                        
   hs-source-dirs:      lib 
 
 test-suite tests
@@ -61,6 +73,14 @@ test-suite weird-advice-tests
   main-is:             weird-advice-tests.hs
   build-depends:       
                        barbies            ^>= 2.0.2.0
+
+test-suite simple-advice-tests
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             simple-advice-tests.hs
+  build-depends:       
+                       barbies            ^>= 2.0.2.0
+
 
 test-suite tests-has-conversion
   import:              common-tasty

@@ -1,5 +1,15 @@
 # Revision history for dep-t-advice
 
+## 0.5.0.0 
+
+* The Advice type has changed to get rid of the existential type.
+  This break the 'makeAdvice' function.   
+* Added 'Control.Monad.Dep.SimpleAdvice' and 'Control.Monad.Dep.SimpleAdvice.Basic'.
+* Moved some "basic" advices.
+* Removed distributeDepT.
+* 'adviseRecord' now receives a 'NonEmpty' path-in-record, ordered innermost-first.
+* More flexible type for doLocally.
+
 ## 0.4.7.0 
 
 * Added 'distributeDepT' and 'component'.

@@ -13,12 +13,15 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module Main (main) where
 
 import Control.Monad.Dep
 import Control.Monad.Dep.Advice
 import Control.Monad.Dep.Advice.Basic
+import Control.Monad.Dep.SimpleAdvice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.RWS
@@ -31,6 +34,9 @@ import Test.Tasty.HUnit
 import Prelude hiding (log)
 import Data.Proxy
 import System.IO
+import Data.List.NonEmpty
+import Data.Typeable
+import GHC.Generics
 
 -- Some helper typeclasses.
 --
@@ -197,17 +203,16 @@ expected = (["I'm going to insert in the db!", "I'm going to write the entity!"]
 -- Experiment about adding instrumetation
 
 doLogging :: forall e m r. (Ensure HasLogger e m, Monad m) => Advice Show e m r
-doLogging = makeAdvice @()
-        (\args -> do
-            e <- ask
-            let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
-            logger e $ "advice before: " ++ intercalate "," args'
-            pure (pure args))
-        (\() action -> do 
+doLogging = makeAdvice \args -> do
+    e <- ask
+    let args' = cfoldMap_NP (Proxy @Show) (\(I a) -> [show a]) args
+    logger e $ "advice before: " ++ intercalate "," args'
+    let tweakExecution action = do
             e <- ask
             r <- action
             logger e $ "advice after"
-            pure r)
+            pure r
+    pure (tweakExecution,  args)
 
 advicedEnv :: Env (DepT Env (Writer TestTrace))
 advicedEnv =
@@ -222,9 +227,9 @@ expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm g
 weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
 weirdAdvicedEnv =
    env {
-         _controller = advise (doLogging <> returnMempty) (_controller env), --,
+         _controller = advise (doLogging <> fromSimple \_ -> returnMempty) (_controller env), --,
          -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
-         _logger = advise @(Show `And` Eq) (makeAdvice @() (\args -> pure (pure args)) (\_ -> id)) (_logger env)
+         _logger = advise @(Show `And` Eq) (makeAdvice (\args -> pure (id, args))) (_logger env)
        }
 
 -- type EnsureLoggerAndWriter :: ((Type -> Type) -> Type) -> (Type -> Type) -> Constraint
@@ -248,15 +253,16 @@ doLogging'' = doLogging <> justARepositoryConstraint
 
 -- Checking that constraints on the results are collected "automatically"
 returnMempty' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
-returnMempty' = returnMempty
+returnMempty' = fromSimple \_ -> returnMempty
 
 justAResultConstraint :: forall ca e m r. (Monad m, Show r, Read r) => Advice ca e m r
 justAResultConstraint = mempty
 
 returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice ca e m r
-returnMempty'' = returnMempty <> justAResultConstraint
+returnMempty'' = fromSimple (\_ -> returnMempty) <> justAResultConstraint
 
-printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (printArgs @NilEnv @IO stdout "foo")
+printArgs' :: Advice (Eq `And` Ord `And` Show) e_ IO ()
+printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
  
 -- does EnvConstraint compile?
 
@@ -298,23 +304,46 @@ cacheTestLogic = do
 
 type ExpensiveComputationMonad = RWS () ([String],()) [(AnyEq,String)]
 
-cacheLookup :: AnyEq -> ExpensiveComputationMonad (Maybe String)
+cacheLookup :: MonadState [(AnyEq,String)] m => AnyEq -> m (Maybe String)
 cacheLookup key = do
     cache <- get
     pure $ lookup key cache
 
-cachePut :: AnyEq -> String -> ExpensiveComputationMonad ()
+cachePut :: MonadState [(AnyEq,String)] m => AnyEq -> String -> m ()
 cachePut key v = modify ((key,v) :)
 
 cacheTestEnv :: CachingTestEnv (DepT CachingTestEnv ExpensiveComputationMonad)
 cacheTestEnv = CachingTestEnv {
         _cacheTestLogic = cacheTestLogic,
-        _expensiveComputation = advise (doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
+        _expensiveComputation = advise (fromSimple \_ -> doCachingBadly cacheLookup cachePut) mkFakeExpensiveComputation,
         _logger2 = mkFakeLogger
     }
 
 expectedCached :: ([String],())
 expectedCached = (["Doing expensive computation","0False","Doing expensive computation","1True","0False","1True"],())
+
+
+--
+-- Stuff for testing the TypeReps in adviseRecord
+data AAA m = AAA { aaa :: BBB m } deriving Generic
+data BBB m = BBB { bbb :: CCC m } deriving Generic
+data CCC m = CCC { ccc :: Int -> Bool ->  m () } deriving Generic
+
+type Trace = Writer [(TypeRep, String)]
+
+tracedEnv :: AAA (DepT AAA Trace)
+tracedEnv = AAA {
+        aaa = BBB {
+            bbb = CCC { 
+               ccc = \_ _ -> pure () 
+            }
+        }
+    }
+
+doTrace :: MonadWriter [(TypeRep, String)] m => NonEmpty (TypeRep, String) -> Advice ca AAA m r
+doTrace trace = makeExecutionAdvice \action -> do
+    tell (toList trace) 
+    action
 
 --
 --
@@ -326,15 +355,24 @@ tests =
     "All"
     [ testCase "hopeThisWorks" $
         assertEqual "" expected $
-          execWriter $ runDepT (do e <- ask; (_controller . _inner) e 7) biggerEnv,
-      testCase "hopeAOPWorks" $
+          execWriter $ runDepT (do e <- ask; (_controller . _inner) e 7) biggerEnv
+    , testCase "hopeAOPWorks" $
         assertEqual "" expectedAdviced $
-          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv,
-      testCase "hopeCachingWorks" $
+          execWriter $ runDepT (do e <- ask; _controller e 7) advicedEnv
+    , testCase "hopeCachingWorks" $
         assertEqual "" expectedCached $
           let action = runFromEnv (pure cacheTestEnv) _cacheTestLogic 
               (_,w) = execRWS action () mempty
            in w
+    , testCase "trace" $ do
+        let tracedEnv' = adviseRecord @Top @Top doTrace tracedEnv
+            result = execWriter $ runFromEnv (pure tracedEnv') (ccc . bbb . aaa) 0 False
+            expected = [
+                  (typeRep (Proxy @CCC), "ccc")
+                , (typeRep (Proxy @BBB), "bbb")
+                , (typeRep (Proxy @AAA), "aaa")
+                ]
+        assertEqual "" expected result
     ]
 
 main :: IO ()

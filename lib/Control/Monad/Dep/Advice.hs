@@ -17,12 +17,13 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE BlockArguments #-}
 
 -- |
---    This package provides the 'Advice' datatype, along for functions for creating,
+--    This module provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
---    'Advice's represent generic transformations on 'DepT'-effectful functions of
+--    'Advice's are type-preserving transformations on 'DepT'-effectful functions of
 --    any number of arguments.
 --
 -- >>> :{
@@ -36,32 +37,32 @@
 --
 -- They work for @DepT@-actions of zero arguments:
 --
--- >>> advise (printArgs stdout "foo0") foo0 `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo0") foo0 `runDepT` NilEnv
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- And for functions of one or more arguments, provided they end on a @DepT@-action:
 --
--- >>> advise (printArgs stdout "foo1") foo1 False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo1") foo1 False `runDepT` NilEnv
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> advise (printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> advise (returnMempty @Top) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> returnMempty @Top) foo2 'd' False `runDepT` NilEnv
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being
 -- applied:
 --
--- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (fromSimple \_ -> printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
@@ -102,8 +103,12 @@ module Control.Monad.Dep.Advice
     adviseRecord,
     deceiveRecord,
     -- * Plugging Has-based constructors
-    distributeDepT,
     component,
+    --distributeDepT,
+
+    -- * Interfacing with "simple" advices
+    toSimple,
+    fromSimple,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -124,6 +129,7 @@ import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Functor.Identity
 import Data.Kind
 import Data.List.NonEmpty qualified as N
+import Data.List.NonEmpty (NonEmpty)
 import Data.SOP
 import Data.SOP.Dict
 import Data.SOP.NP
@@ -131,6 +137,8 @@ import Data.Typeable
 import GHC.Generics qualified as G
 import GHC.TypeLits
 import Data.Coerce
+import Data.Bifunctor (first)
+import Control.Monad.Dep.SimpleAdvice.Internal qualified as SA
 
 -- $setup
 --
@@ -152,7 +160,7 @@ import Data.Coerce
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Dep
 -- >>> import Control.Monad.Dep.Advice
--- >>> import Control.Monad.Dep.Advice.Basic (printArgs,returnMempty)
+-- >>> import Control.Monad.Dep.SimpleAdvice.Basic (printArgs,returnMempty)
 -- >>> import Control.Monad.Writer
 -- >>> import Data.Kind
 -- >>> import Data.SOP
@@ -164,9 +172,9 @@ import Data.Coerce
 -- >>> import GHC.Generics qualified
 
 -- | A generic transformation of 'DepT'-effectful functions with environment
--- @e_@ of kind @(Type -> Type) -> Type@, base monad @m@ and return type @r@,
--- provided the functions satisfy certain constraint @ca@ of kind @Type ->
--- Constraint@ on all of their arguments.
+-- @e_@, base monad @m@ and return type @r@,
+-- provided the functions satisfy certain constraint @ca@
+-- on all of their arguments.
 --
 -- Note that the type constructor for the environment @e_@ is given unapplied.
 -- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
@@ -184,18 +192,13 @@ type Advice ::
   (Type -> Type) ->
   Type ->
   Type
-data Advice ca e_ m r where
+data Advice (ca :: Type -> Constraint) (e_ :: (Type -> Type) -> Type) m r where
   Advice ::
-    forall u ca e_ m r.
-    Proxy u ->
+    forall ca e_ m r.
     ( forall as.
       All ca as =>
       NP I as ->
-      DepT e_ m (u, NP I as)
-    ) ->
-    ( u ->
-      DepT e_ m r ->
-      DepT e_ m r
+      DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
     ) ->
     Advice ca e_ m r
 
@@ -206,103 +209,44 @@ data Advice ca e_ m r where
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
 instance Monad m => Semigroup (Advice ca e_ m r) where
-  Advice outer tweakArgsOuter tweakExecutionOuter <> Advice inner tweakArgsInner tweakExecutionInner =
-    let captureExistentials ::
-          forall ca e_ r outer inner.
-          Proxy outer ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            DepT e_ m (outer, NP I as)
-          ) ->
-          ( outer ->
-            DepT e_ m r ->
-            DepT e_ m r
-          ) ->
-          Proxy inner ->
-          ( forall as.
-            All ca as =>
-            NP I as ->
-            DepT e_ m (inner, NP I as)
-          ) ->
-          ( inner ->
-            DepT e_ m r ->
-            DepT e_ m r
-          ) ->
-          Advice ca e_ m r
-        captureExistentials _ tweakArgsOuter' tweakExecutionOuter' _ tweakArgsInner' tweakExecutionInner' =
-          Advice
-            (Proxy @(Pair outer inner))
-            ( let tweakArgs ::
-                    forall as.
-                    All ca as =>
-                    NP I as ->
-                    DepT e_ m (Pair outer inner, NP I as)
-                  tweakArgs args =
-                    do
-                      (uOuter, argsOuter) <- tweakArgsOuter' @as args
-                      (uInner, argsInner) <- tweakArgsInner' @as argsOuter
-                      pure (Pair uOuter uInner, argsInner)
-               in tweakArgs
-            )
-            ( let tweakExecution ::
-                    Pair outer inner ->
-                    DepT e_ m r ->
-                    DepT e_ m r
-                  tweakExecution =
-                    ( \(Pair uOuter uInner) action ->
-                        tweakExecutionOuter' uOuter (tweakExecutionInner' uInner action)
-                    )
-               in tweakExecution
-            )
-     in captureExistentials @ca @e_ outer tweakArgsOuter tweakExecutionOuter inner tweakArgsInner tweakExecutionInner
+  Advice outer <> Advice inner = Advice \args -> do
+    (tweakOuter, argsOuter) <- outer args
+    (tweakInner, argsInner) <- inner argsOuter
+    pure (tweakOuter . tweakInner, argsInner)
 
 instance Monad m => Monoid (Advice ca e_ m r) where
   mappend = (<>)
-  mempty = Advice (Proxy @()) (\args -> pure (pure args)) (const id)
+  mempty = Advice \args -> pure (id, args)
 
 -- |
---    The most general (and complex) way of constructing 'Advice's.
+--    The most general way of constructing 'Advice's.
 --
---    'Advice's work in two phases. First, the arguments of the transformed
---    function are collected into an n-ary product 'NP', and passed to the
---    first argument of 'makeAdvice', which produces a (possibly transformed)
---    product of arguments, along with some summary value of type @u@. Use @()@
---    as the summary value if you don't care about it.
---
---    In the second phase, the monadic action produced by the function once all
---    arguments have been given is transformed using the second argument of
---    'makeAdvice'. This second argument also receives the summary value of
---    type @u@ calculated earlier.
+--    An 'Advice' is a function that transforms other functions in an 
+--    arity-polymorphic way. It receives the arguments of the advised
+--    function packed into an n-ary product 'NP', performs some 
+--    effects based on them, and returns a potentially modified version of the 
+--    arguments, along with a function for tweaking the execution of the
+--    advised function.
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
---  doesNothing = makeAdvice @() (\args -> pure (pure args)) (\() action -> action)
+--  doesNothing = makeAdvice (\args -> pure (id,  args)) 
 -- :}
 --
---    __/TYPE APPLICATION REQUIRED!/__ When invoking 'makeAdvice', you must always give the
---    type of the existential @u@ through a type application. Otherwise you'll
---    get weird \"u is untouchable\" errors.
+--
 makeAdvice ::
-  forall u ca e_ m r.
-  -- | The function that tweaks the arguments.
+  forall ca e_ m r.
+  -- | The function that tweaks the arguments and the execution.
   ( forall as.
     All ca as =>
     NP I as ->
-    DepT e_ m (u, NP I as)
-  ) ->
-  -- | The function that tweaks the execution.
-  ( u ->
-    DepT e_ m r ->
-    DepT e_ m r
+    DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
   ) ->
   Advice ca e_ m r
-makeAdvice = Advice (Proxy @u)
+makeAdvice = Advice
 
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
---
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
@@ -319,17 +263,12 @@ makeArgsAdvice ::
   ) ->
   Advice ca e_ m r
 makeArgsAdvice tweakArgs =
-  makeAdvice @()
-    ( \args -> do
-        args <- tweakArgs args
-        pure ((), args)
-    )
-    (const id)
+  makeAdvice $ \args -> do
+    args' <- tweakArgs args
+    pure (id, args')
 
 -- |
 --    Create an advice which only tweaks the execution of the final monadic action.
---
---    Notice that there's no @u@ parameter, unlike with 'makeAdvice'.
 --
 -- >>> :{
 --  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
@@ -343,7 +282,7 @@ makeExecutionAdvice ::
     DepT e_ m r
   ) ->
   Advice ca e_ m r
-makeExecutionAdvice tweakExecution = makeAdvice @() (\args -> pure (pure args)) (\() action -> tweakExecution action)
+makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
 
 data Pair a b = Pair !a !b
 
@@ -385,7 +324,7 @@ type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m))
 -- >>> :{
 --  foo :: Int -> DepT NilEnv IO String
 --  foo _ = pure "foo"
---  advisedFoo = advise (printArgs stdout "Foo args: ") foo
+--  advisedFoo = advise (fromSimple \_ -> printArgs stdout "Foo args: ") foo
 -- :}
 --
 -- __/TYPE APPLICATION REQUIRED!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
@@ -394,8 +333,8 @@ type Ensure c e_ m = c (DepT e_ m) (e_ (DepT e_ m))
 -- >>> :{
 --  bar :: Int -> DepT NilEnv IO String
 --  bar _ = pure "bar"
---  advisedBar1 = advise (returnMempty @Top) bar
---  advisedBar2 = advise @Top returnMempty bar
+--  advisedBar1 = advise (fromSimple \_ -> returnMempty @Top) bar
+--  advisedBar2 = advise @Top (fromSimple \_ -> returnMempty) bar
 -- :}
 advise ::
   forall ca e_ m r as advisee.
@@ -405,11 +344,11 @@ advise ::
   -- | A function to be adviced.
   advisee ->
   advisee
-advise (Advice _ tweakArgs tweakExecution) advisee = do
+advise (Advice f) advisee = do
   let uncurried = multiuncurry @as @e_ @m @r advisee
       uncurried' args = do
-        (u, args') <- tweakArgs args
-        tweakExecution u (uncurried args')
+        (tweakExecution, args') <- f args
+        tweakExecution (uncurried args')
    in multicurry @as @e_ @m @r uncurried'
 
 type Multicurryable ::
@@ -494,7 +433,7 @@ askFinalDepT = _askFinalDepT @as @e_ @m @r
 --      let foo' = runFromEnv (readIORef envRef) _foo
 --      do r <- foo' 7
 --         print r
---      modifyIORef envRef (\e -> e { _foo = advise @Top returnMempty (_foo e) })
+--      modifyIORef envRef (\e -> e { _foo = advise @Top (fromSimple \_ -> returnMempty) (_foo e) })
 --      do r <- foo' 7
 --         print r
 -- :}
@@ -546,12 +485,12 @@ runFromDep envAction member = _runFromEnv envAction (member . dep)
 --
 -- >>> :{
 --  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
---  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
+--  stricterPrintArgs = restrictArgs (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
 -- :}
 --
 --    or with a type application to 'restrictArgs':
 --
--- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
+-- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -570,32 +509,13 @@ restrictArgs ::
 -- because the composition might be done
 -- on the fly, while constructing a record, without a top-level binding with a
 -- type signature.  This seems to favor putting "more" first.
-restrictArgs evidence (Advice proxy tweakArgs tweakExecution) =
-  let captureExistential ::
-        forall more less e_ m r u.
-        (forall x. Dict more x -> Dict less x) ->
-        Proxy u ->
-        ( forall as.
-          All less as =>
-          NP I as ->
-          DepT e_ m (u, NP I as)
-        ) ->
-        ( u ->
-          DepT e_ m r ->
-          DepT e_ m r
-        ) ->
-        Advice more e_ m r
-      captureExistential evidence' _ tweakArgs' tweakExecution' =
-        Advice
-          (Proxy @u)
-          ( let tweakArgs'' :: forall as. All more as => NP I as -> DepT e_ m (u, NP I as)
-                tweakArgs'' = case Data.SOP.Dict.mapAll @more @less evidence' of
-                  f -> case f (Dict @(All more) @as) of
-                    Dict -> \args -> tweakArgs' @as args
-             in tweakArgs''
-          )
-          tweakExecution'
-   in captureExistential evidence proxy tweakArgs tweakExecution
+restrictArgs evidence (Advice advice) = Advice \args ->
+    let advice' :: forall as. All more as => NP I as -> DepT e_ m (DepT e_ m r -> DepT e_ m r, NP I as)
+        advice' args' =
+            case Data.SOP.Dict.mapAll @more @less evidence of
+               f -> case f (Dict @(All more) @as) of
+                        Dict -> advice args'
+     in advice' args
 
 --
 type Gullible ::
@@ -790,17 +710,6 @@ deceiveRecord ::
 deceiveRecord = _deceiveRecord @e @e_ @m @gullible
 
 
--- | Having a 'DepT' action that returns a record-of-functions with effects in
--- 'DepT' is the same as having the record itself, because we can obtain the initial
--- environment by 'ask'ing for it in each member function.
-distributeDepT 
-    :: forall e_ m record . DistributiveRecord e_ m record => 
-    -- | 'DepT' action that returns the component
-    DepT e_ m (record (DepT e_ m)) ->
-    -- | component whose methods get the environment by 'ask'ing.
-    record (DepT e_ m)
-distributeDepT (DepT (ReaderT action)) = _distribute @e_ @m @record action
-
 -- | Given a constructor that returns a record-of-functions with effects in 'DepT',
 -- produce a record in which the member functions 'ask' for the environment themselves.
 --
@@ -868,11 +777,11 @@ instance
 --
 type AdvisedRecord :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
 class AdvisedRecord ca e_ m cr advised where
-  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e_ m r) -> advised (DepT e_ m) -> advised (DepT e_ m)
 
 type AdvisedProduct :: (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
 class AdvisedProduct ca e_ m cr advised_ where
-  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised_ k -> advised_ k
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e_ m r) -> advised_ k -> advised_ k
 
 instance
   ( G.Generic (advised (DepT e_ m)),
@@ -906,7 +815,7 @@ type family DiscriminateAdvisedComponent c where
 
 type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
 class AdvisedComponent component_type ca e_ m cr advised where
-  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => [(TypeRep, String)] -> Advice ca e_ m r) -> advised -> advised
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e_ m r) -> advised -> advised
 
 instance
   ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised,
@@ -915,7 +824,7 @@ instance
   AdvisedProduct ca e_ m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
   where
   _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
-    let acc' = acc ++ [(tr, symbolVal (Proxy @fieldName))]
+    let acc' = (tr, symbolVal (Proxy @fieldName)) : acc
      in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc' f advised))
 
 instance
@@ -928,7 +837,7 @@ instance
   (Multicurryable as e_ m r advised, All ca as, cr r, Monad m) =>
   AdvisedComponent Terminal ca e_ m cr advised
   where
-  _adviseComponent acc f advised = advise @ca @e_ @m (f acc) advised
+  _adviseComponent acc f advised = advise @ca @e_ @m (f (N.fromList acc)) advised
 
 instance
   AdvisedComponent (DiscriminateAdvisedComponent advised) ca e_ m cr advised =>
@@ -948,7 +857,7 @@ instance
 -- which represent the record types and fields names we have
 -- traversed until arriving at the advised function. This info can be useful for
 -- logging advices. It's a list instead of a single tuple because
--- 'adviseRecord' works recursively.
+-- 'adviseRecord' works recursively. The elements come innermost-first.
 --
 -- __/TYPE APPLICATION REQUIRED!/__ The @ca@ constraint on function arguments
 -- and the @cr@ constraint on the result type must be supplied by means of a
@@ -957,7 +866,7 @@ adviseRecord ::
   forall ca cr e_ m advised.
   AdvisedRecord ca e_ m cr advised =>
   -- | The advice to apply.
-  (forall r . cr r => [(TypeRep, String)] -> Advice ca e_ m r) ->
+  (forall r . cr r => NonEmpty (TypeRep, String) -> Advice ca e_ m r) ->
   -- | The record to advise recursively.
   advised (DepT e_ m) ->
   -- | The advised record.
@@ -1037,3 +946,22 @@ adviseRecord = _adviseRecord @ca @e_ @m @cr []
 -- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
 --
 -- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.
+
+-- | An advice that is polymorphic on the environment (allowing it to unify
+-- with 'Control.Monad.Dep.NilEnv') can be converted to a "simple" 'Control.Monad.Dep.SimpleAdvice.Advice' that doesn't require 'Control.Monad.Dep.DepT' at all. 
+toSimple :: Monad m => Advice ca NilEnv m r -> SA.Advice ca m r
+toSimple (Advice f) = SA.Advice \args -> lift do
+    (withExecution, args') <- f args `runDepT` NilEnv
+    let withExecution' = lift . flip runDepT NilEnv . withExecution . lift . SA.runAspectT
+    pure (withExecution', args')
+
+-- | Convert a simple 'Control.Monad.Dep.SimpleAdvice.Advice' whose monad unifies with `DepT e_ m` into an 'Advice'.
+fromSimple :: forall ca e_ m r. Monad m => (e_ (DepT e_ m) -> SA.Advice ca (DepT e_ m) r) -> Advice ca e_ m r
+fromSimple makeAdvice = Advice \args -> do
+    env <- ask
+    case makeAdvice env of
+        SA.Advice f -> do
+            let SA.AspectT argsAction = f args
+            (tweakExecution, args') <- argsAction
+            pure (coerce tweakExecution, args')
+
