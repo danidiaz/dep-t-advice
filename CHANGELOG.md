@@ -3,7 +3,7 @@
 ## 0.5.0.0 
 
 * The Advice type has changed to get rid of the existential type.
-  This break the 'makeAdvice' function.   
+  This breaks the 'makeAdvice' function.   
 * Added 'Control.Monad.Dep.SimpleAdvice' and 'Control.Monad.Dep.SimpleAdvice.Basic'.
 * Moved some "basic" advices.
 * Removed distributeDepT.
