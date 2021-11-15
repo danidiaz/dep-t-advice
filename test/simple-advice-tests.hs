@@ -28,7 +28,6 @@ import Prelude hiding (log)
 import Barbies
 import Control.Monad.Dep
 import Control.Monad.Dep.SimpleAdvice
-import Control.Monad.Dep.Advice (toSimple)
 import Control.Monad.Dep.SimpleAdvice.Basic
 import Control.Monad.Dep.Has
 import Control.Monad.Reader
@@ -46,15 +45,22 @@ import Test.Tasty.HUnit
 import Data.IORef
 import System.IO
 
+printArgs' :: forall m r. MonadIO m => Handle -> String -> Advice (Show `And` Eq) m r
+printArgs' h s = restrictArgs (\Dict -> Dict) (printArgs h s) 
+
 -- the "component" we want to decorate
-newtype Foo m = Foo { runFoo :: Int -> Bool -> m () } 
-                deriving stock Generic
+data Foo m = Foo { 
+        runFoo :: Int -> Bool -> m () 
+    ,   runBar :: m Int
+    ,   runBaz :: Char -> m Char
+    } 
+    deriving stock Generic
 
 fooFunc :: MonadWriter [String] m => Int -> Bool -> m ()  
 fooFunc = \_ _ -> tell ["foo"] 
 
 foo :: MonadWriter [String] m => Foo m
-foo = Foo fooFunc
+foo = Foo fooFunc (pure 5) (\_ -> pure 'c')
 
 -- works with functions of any number of arguments
 someAdvice :: MonadWriter [String] m => Advice Top m r 
@@ -64,6 +70,18 @@ someAdvice = makeExecutionAdvice \action -> do
     tell ["after"]
     pure r
 
+someAdvice' :: MonadWriter [String] m => Advice Top m r 
+someAdvice' = 
+    (makeExecutionAdvice \action -> do
+        r <- action
+        tell ["after"]
+        pure r)
+    <>
+    (makeExecutionAdvice \action -> do
+        tell ["before"]
+        r <- action
+        pure r)
+
 advisedFoo :: MonadWriter [String] m => Foo m
 advisedFoo = advising (adviseRecord @Top @Top \_ -> someAdvice) foo
 
@@ -72,7 +90,11 @@ advisedFoo = advising (adviseRecord @Top @Top \_ -> someAdvice) foo
 -- "simple" advices can decorate
 -- non-DepT *concrete* monads.
 concreteFoo :: IORef [String] -> Foo IO
-concreteFoo ref = Foo \_ _ -> modifyIORef ref (\xs -> xs ++ ["foo"])
+concreteFoo ref = Foo {
+        runFoo = \_ _ -> modifyIORef ref (\xs -> xs ++ ["foo"])
+    ,   runBar = pure 5
+    ,   runBaz = \_ -> pure 'c'
+    }
 
 refAdvice :: MonadIO m => IORef [String] -> Advice Top m r 
 refAdvice ref = makeExecutionAdvice \action -> do
@@ -87,12 +109,13 @@ concreteAdvisedFoo ref =
 
 printAdvisedFoo :: IORef [String] -> Foo IO
 printAdvisedFoo ref =
-    advising (adviseRecord @_ @Top (\_ -> printArgs stdout "args: ")) (concreteFoo ref)
+    advising (adviseRecord @_ @Top (\_ -> printArgs' stdout "args: ")) (concreteFoo ref)
 
 --
 -- Stuff for testing the TypeReps in adviseRecord
 data AAA m = AAA { aaa :: BBB m } deriving Generic
-data BBB m = BBB { bbb :: CCC m } deriving Generic
+-- just to check that newtypes are handled correctly
+newtype BBB m = BBB { bbb :: CCC m } deriving Generic 
 data CCC m = CCC { ccc :: Int -> Bool ->  m () } deriving Generic
 
 type Trace = Writer [(TypeRep, String)]
@@ -121,6 +144,10 @@ tests =
       testCase "adviseBare" $
         assertEqual "" ["before","foo","after"] $
             let advisedFunc = advise @Top someAdvice fooFunc
+             in execWriter $ runAspectT $ advisedFunc 0 False
+    , testCase "adviseBare_monoid" $
+        assertEqual "" ["before","foo","after"] $
+            let advisedFunc = advise @Top someAdvice' fooFunc
              in execWriter $ runAspectT $ advisedFunc 0 False
     , testCase "adviseRecord" $
         assertEqual "" ["before","foo","after"] $
