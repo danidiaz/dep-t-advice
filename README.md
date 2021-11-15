@@ -182,10 +182,6 @@ Symbiosis](http://publications.csail.mit.edu/ai/browse/0200browse.shtml):
 - [Using the “constraints” package to make a wrapped function less
   polymorphic](https://stackoverflow.com/questions/65800809/using-the-constraints-package-to-make-a-wrapped-function-less-polymorphic)
 
-- [Dependency Injection Principles, Practices, and
-  Patterns](https://www.goodreads.com/book/show/44416307-dependency-injection-principles-practices-and-patterns)
-  This is a good book on the general princples of DI. 
-
 - [variadic-function](https://hackage.haskell.org/package/variadic-function) a
   Hackage library which also deals with functions of any number of elements.
   [Reddit
