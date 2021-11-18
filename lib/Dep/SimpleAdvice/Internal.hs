@@ -22,12 +22,12 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE BlockArguments #-}
 
-module Control.Monad.Dep.SimpleAdvice.Internal where
+module Dep.SimpleAdvice.Internal where
 
+import Dep.Has
 import Data.Coerce
 import Control.Monad
 import Control.Monad.Fix
-import Control.Monad.Dep.Has
 import Data.Functor.Identity
 import Data.Kind
 import Data.List.NonEmpty qualified as N

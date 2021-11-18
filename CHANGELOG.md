@@ -1,5 +1,11 @@
 # Revision history for dep-t-advice
 
+## 0.5.1.0 
+
+* `Control.Monad.whatever` renamed to `whatever`. 
+
+  The old modules still remain, but deprecated.
+
 ## 0.5.0.0 
 
 * The Advice type has changed to get rid of the existential type.

@@ -26,10 +26,10 @@ module Main (main) where
 
 import Prelude hiding (log)
 import Control.Monad.Dep
-import Control.Monad.Dep.Has
-import Control.Monad.Dep.Env
-import Control.Monad.Dep.Advice
-import Control.Monad.Dep.Advice.Basic
+import Dep.Has
+import Dep.Env
+import Dep.Advice
+import Dep.Advice.Basic
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Control.Monad.RWS

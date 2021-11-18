@@ -24,9 +24,9 @@
 module Main (main) where
 
 import Barbies
+import Dep.Advice
+import Dep.Has
 import Control.Monad.Dep
-import Control.Monad.Dep.Advice
-import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Coerce
