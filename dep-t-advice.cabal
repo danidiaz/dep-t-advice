@@ -86,11 +86,17 @@ test-suite simple-advice-tests
   build-depends:       
                        barbies            ^>= 2.0.2.0
 
-
 test-suite tests-has-conversion
   import:              common-tasty
   type:                exitcode-stdio-1.0
   main-is:             tests-has-conversion.hs
+  build-depends:       aeson,
+                       containers
+
+test-suite synthetic-callstack-tests
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             synthetic-callstack-tests.hs
   build-depends:       aeson,
                        containers
 
