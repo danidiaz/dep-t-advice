@@ -124,12 +124,14 @@ makeController (asCall -> call) =
 --
 -- It doesn't know about the exact datatypes the business logic uses,
 -- or about the arity of methods in the business logic.
+--
+-- It can be reused accross applications.
 
 type StackTrace = [(TypeRep, String)]
 
 data SyntheticCallStackException
   = SyntheticCallStackException IOException StackTrace
-  deriving (Show)
+  deriving stock (Eq, Show)
 
 instance Exception SyntheticCallStackException
 
@@ -145,8 +147,8 @@ keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
       Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
       Right r -> pure r
 
-bombAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
-bombAt i = ContT $ bracket (newIORef bombs) pure
+throwAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
+throwAt i = ContT $ bracket (newIORef bombs) pure
   where
     bombs =
       ( replicate i (pure ()) ++ repeat (throwIO (userError "oops")),
@@ -157,7 +159,6 @@ bombAt i = ContT $ bracket (newIORef bombs) pure
 --
 -- We list which components from part of the application.
 --
-
 data Env h m = Env
   { logger :: h (Logger m),
     repository :: h (Repository m),
@@ -189,7 +190,7 @@ env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
 env =
   Env
     { logger =
-        bombAt 1 `bindPhase` \ref ->
+        throwAt 1 `bindPhase` \ref ->
           constructor (\_ -> makeStdoutLogger)
             <&> advising
               ( adviseRecord @Top @Top \method ->
@@ -217,15 +218,25 @@ env =
 --
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
-  runContT (pullPhase @Allocator env) \constructors -> do
-    let (asCall -> call) = fixEnv constructors
-    flip
-      runReaderT
-      []
-      ( do
-          _ <- call route 1 2
-          pure ()
-      )
+  let action = 
+          runContT (pullPhase @Allocator env) \constructors -> do
+            let (asCall -> call) = fixEnv constructors
+            flip
+              runReaderT
+              []
+              ( do
+                  _ <- call route 1 2
+                  pure ()
+              )
+      expectedException = SyntheticCallStackException (userError "oops")
+            [(typeRep (Proxy @Logger), "emitMsg")
+            ,(typeRep (Proxy @Repository), "insert")
+            ,(typeRep (Proxy @Controller), "route")]
+
+  me <- try @SyntheticCallStackException action
+  case me of 
+    Left ex -> assertEqual "exception with callstack"  expectedException ex
+    Right _ -> assertFailure "expected exception did not appear"
 
 tests :: TestTree
 tests =
