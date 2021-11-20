@@ -148,6 +148,11 @@ type Phases env_ m = Allocator `Compose` Constructor env_ m
 
 type StackTrace = [(TypeRep, String)]
 
+data SyntheticCallStackException = 
+    SyntheticCallStackException IOException StackTrace 
+    deriving Show
+instance Exception SyntheticCallStackException
+
 -- Environment value
 --
 bombAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
