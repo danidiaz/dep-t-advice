@@ -178,8 +178,9 @@ env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
 env = Env {
       logger = 
         bombAt 1 `bindPhase` \ref ->
-        constructor (\_ -> makeStdoutLogger) 
-            <&> advising (adviseRecord @Top @Top (\_ -> injectFailures ref))    
+        constructor (\_ -> makeStdoutLogger) <&> 
+        advising (adviseRecord @Top @Top \method -> 
+            injectFailures ref)
     , repository = 
         allocateSet `bindPhase` \ref -> 
         constructor (makeInMemoryRepository ref)
