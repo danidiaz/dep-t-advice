@@ -147,8 +147,8 @@ keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
       Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
       Right r -> pure r
 
-throwAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
-throwAt i = ContT $ bracket (newIORef bombs) pure
+allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
+allocateBombs i = ContT $ bracket (newIORef bombs) pure
   where
     bombs =
       ( replicate i (pure ()) ++ repeat (throwIO (userError "oops")),
@@ -190,7 +190,7 @@ env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
 env =
   Env
     { logger =
-        throwAt 1 `bindPhase` \ref ->
+        allocateBombs 1 `bindPhase` \ref ->
           constructor (\_ -> makeStdoutLogger)
             <&> advising
               ( adviseRecord @Top @Top \method ->
