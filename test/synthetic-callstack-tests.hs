@@ -31,6 +31,7 @@ import Data.Function ((&))
 import Data.Functor (($>), (<&>))
 import Data.Functor.Compose
 import Data.Functor.Identity
+import Data.Functor.Constant
 import Data.IORef
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
@@ -63,6 +64,8 @@ import Dep.SimpleAdvice
     makeExecutionAdvice,
   )
 import Dep.SimpleAdvice.Basic (injectFailures)
+import Dep.Advice qualified as A
+import Control.Monad.Dep (DepT)
 import GHC.Generics (Generic)
 import GHC.TypeLits
 import System.IO
@@ -220,6 +223,63 @@ env =
     }
 
 --
+type Phases' = Allocator `Compose` Identity
+
+data Env' h m = Env'
+  { logger' :: h (Logger m),
+    repository' :: h (Repository m),
+    controller' :: h (Controller m), 
+    stack :: h (Constant StackTrace m)
+  }
+  deriving stock (Generic)
+  deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
+
+deriving via Autowired (Env' Identity m) instance Autowireable r_ m (Env' Identity m) => Has r_ m (Env' Identity m)
+
+addStackFrame :: (TypeRep, MethodName) -> Constant StackTrace z -> Constant StackTrace z 
+addStackFrame frame (Constant stack) = Constant (frame : stack)
+
+modifyStackField :: (Constant StackTrace m -> Constant StackTrace m) -> Env' Identity m -> Env' Identity m
+modifyStackField f env = env { stack = Identity (f (runIdentity (stack env))) }
+
+keepSyntheticStack' ::
+  (MonadUnliftIO m) =>
+  NonEmpty (TypeRep, MethodName) ->
+  A.Advice ca (Env' Identity) m r
+keepSyntheticStack' (NonEmpty.head -> method) = A.makeExecutionAdvice \action -> do
+  Identity (Constant currentStack) <- asks stack
+  withRunInIO \unlift -> do
+    er <- try @IOException (unlift (local (modifyStackField (addStackFrame method)) action))
+    case er of
+      Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
+      Right r -> pure r
+
+env' :: Env' Phases' (DepT (Env' Identity) IO) 
+env' =
+  Env'
+    { logger' =
+        allocateBombs 1 `bindPhase` \bombs ->
+          pure $ A.component (\_ -> makeStdoutLogger)
+            & ( A.adviseRecord @Top @Top \method ->
+                  keepSyntheticStack' method <> A.fromSimple (\_ -> injectFailures bombs)
+              )
+    , repository' =
+        allocateSet `bindPhase` \ref ->
+          pure $ A.component (makeInMemoryRepository ref)
+            & ( A.adviseRecord @Top @Top \method ->
+                  keepSyntheticStack' method
+              )
+    , controller' =
+        skipPhase @Allocator $
+          pure $ A.component makeController
+            & ( A.adviseRecord @Top @Top \method ->
+                  keepSyntheticStack' method
+              )
+    , stack = skipPhase @Allocator $
+        pure $ Constant []
+    }
+
+--
 --
 --
 --
@@ -248,11 +308,32 @@ testSyntheticCallStack = do
     Left ex -> assertEqual "exception with callstack" expectedException ex
     Right _ -> assertFailure "expected exception did not appear"
 
+
+testSyntheticCallStack' :: Assertion
+testSyntheticCallStack' = do
+  let action =
+        runContT (pullPhase @Allocator env') \runnable -> do
+          _ <- A.runFromDep (pure runnable) route 1 2 
+          pure ()
+      expectedException =
+        SyntheticCallStackException
+          (userError "oops")
+          [ (typeRep (Proxy @Logger), "emitMsg"),
+            (typeRep (Proxy @Repository), "insert"),
+            (typeRep (Proxy @Controller), "route")
+          ]
+  me <- try @SyntheticCallStackException action
+  case me of
+    Left ex -> assertEqual "exception with callstack" expectedException ex
+    Right _ -> assertFailure "expected exception did not appear"
+
+
 tests :: TestTree
 tests =
   testGroup
     "All"
     [ testCase "synthetic call stack" testSyntheticCallStack
+    , testCase "synthetic call stack - DepT" testSyntheticCallStack'
     ]
 
 main :: IO ()
