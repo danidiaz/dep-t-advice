@@ -127,7 +127,8 @@ makeController (asCall -> call) =
 --
 -- It can be reused accross applications.
 
-type StackTrace = [(TypeRep, String)]
+type MethodName = String
+type StackTrace = [(TypeRep, MethodName)]
 
 data SyntheticCallStackException
   = SyntheticCallStackException IOException StackTrace
@@ -137,7 +138,7 @@ instance Exception SyntheticCallStackException
 
 keepSyntheticStack ::
   (MonadUnliftIO m, MonadReader StackTrace m) =>
-  NonEmpty (TypeRep, String) ->
+  NonEmpty (TypeRep, MethodName) ->
   Advice ca m r
 keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
   currentStack <- ask
@@ -190,11 +191,11 @@ env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
 env =
   Env
     { logger =
-        allocateBombs 1 `bindPhase` \ref ->
+        allocateBombs 1 `bindPhase` \bombs ->
           constructor (\_ -> makeStdoutLogger)
             <&> advising
               ( adviseRecord @Top @Top \method ->
-                  keepSyntheticStack method <> injectFailures ref
+                  keepSyntheticStack method <> injectFailures bombs
               ),
       repository =
         allocateSet `bindPhase` \ref ->
@@ -223,7 +224,7 @@ testSyntheticCallStack = do
             let (asCall -> call) = fixEnv constructors
             flip
               runReaderT
-              []
+              ([] :: StackTrace) -- the initial stack trace for the call
               ( do
                   _ <- call route 1 2
                   pure ()
