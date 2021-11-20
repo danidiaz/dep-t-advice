@@ -4,10 +4,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -17,9 +15,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -28,42 +24,51 @@ module Main (main) where
 
 import Control.Arrow (Kleisli (..))
 import Control.Exception
-import Control.Monad.Dep
-import Control.Monad.Dep.Class
 import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Cont
-import Control.Monad.Writer
-import Data.Aeson
-import Data.Aeson.Types
-import Data.Coerce
 import Data.Function ((&))
 import Data.Functor (($>), (<&>))
 import Data.Functor.Compose
-import Data.Functor.Constant
 import Data.Functor.Identity
 import Data.IORef
-import Data.Kind
-import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
-import Data.String
-import Data.Text qualified as Text
 import Data.Typeable
 import Dep.Env
+  ( Autowireable,
+    Autowired (..),
+    Constructor,
+    DemotableFieldNames,
+    FieldsFindableByType,
+    Phased,
+    bindPhase,
+    constructor,
+    fixEnv,
+    pullPhase,
+    skipPhase,
+  )
 import Dep.Has
+  ( Has,
+    asCall,
+  )
 import Dep.SimpleAdvice
-import Dep.SimpleAdvice.Basic
+  ( Advice,
+    AspectT (..),
+    Top,
+    adviseRecord,
+    advising,
+    makeExecutionAdvice,
+  )
+import Dep.SimpleAdvice.Basic (injectFailures)
 import GHC.Generics (Generic)
 import GHC.TypeLits
 import System.IO
 import Test.Tasty
 import Test.Tasty.HUnit
-import Prelude hiding (insert, log, lookup)
+import Prelude hiding (insert, lookup)
 
 -- The interfaces
 newtype Logger m = Logger
@@ -128,6 +133,7 @@ makeController (asCall -> call) =
 -- It can be reused accross applications.
 
 type MethodName = String
+
 type StackTrace = [(TypeRep, MethodName)]
 
 data SyntheticCallStackException
@@ -176,7 +182,7 @@ deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity
 --
 
 -- A phase in which we might allocate some resource needed by the component,
--- also set some bracket-like resource management. 
+-- also set some bracket-like resource management.
 type Allocator = ContT () IO
 
 -- First we allocate any needed resource, then we have a construction phase
@@ -219,24 +225,27 @@ env =
 --
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
-  let action = 
-          runContT (pullPhase @Allocator env) \constructors -> do
-            let (asCall -> call) = fixEnv constructors
-            flip
-              runReaderT
-              ([] :: StackTrace) -- the initial stack trace for the call
-              ( do
-                  _ <- call route 1 2
-                  pure ()
-              )
-      expectedException = SyntheticCallStackException (userError "oops")
-            [(typeRep (Proxy @Logger), "emitMsg")
-            ,(typeRep (Proxy @Repository), "insert")
-            ,(typeRep (Proxy @Controller), "route")]
+  let action =
+        runContT (pullPhase @Allocator env) \constructors -> do
+          let (asCall -> call) = fixEnv constructors
+          flip
+            runReaderT
+            ([] :: StackTrace) -- the initial stack trace for the call
+            ( do
+                _ <- call route 1 2
+                pure ()
+            )
+      expectedException =
+        SyntheticCallStackException
+          (userError "oops")
+          [ (typeRep (Proxy @Logger), "emitMsg"),
+            (typeRep (Proxy @Repository), "insert"),
+            (typeRep (Proxy @Controller), "route")
+          ]
 
   me <- try @SyntheticCallStackException action
-  case me of 
-    Left ex -> assertEqual "exception with callstack"  expectedException ex
+  case me of
+    Left ex -> assertEqual "exception with callstack" expectedException ex
     Right _ -> assertFailure "expected exception did not appear"
 
 tests :: TestTree
