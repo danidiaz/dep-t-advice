@@ -20,7 +20,8 @@ module Dep.SimpleAdvice.Basic
     printArgs,
     AnyEq (..),
     doCachingBadly,
-    doAsyncBadly
+    doAsyncBadly,
+    injectFailures
   )
 where
 
@@ -35,6 +36,7 @@ import System.IO
 import Type.Reflection
 import Control.Concurrent
 import Control.Monad.IO.Unlift
+import Data.IORef
 
 -- $setup
 --
@@ -137,5 +139,24 @@ doAsyncBadly :: forall ca m . MonadUnliftIO m => Advice ca m ()
 doAsyncBadly = makeExecutionAdvice \action -> do
     _ <- withRunInIO (\unlift -> forkIO (unlift action))
     pure ()
+
+
+-- | Given a reference with two infinite lists of 'IO' actions, on each
+-- invocation of the advised function, take an action from the first list and
+-- execute it before, and take one action from the second list and execute it
+-- after.
+--
+-- A common use for this would be to pass exception-throwing actions.
+injectFailures :: forall ca m r . (MonadIO m, MonadFail m) => IORef ([IO ()], [IO ()]) -> Advice ca m r
+injectFailures ref = makeExecutionAdvice \action -> do
+    (before, after) <- liftIO $ atomicModifyIORef' ref \(before : befores, after : afters) -> ((befores, afters), (before, after))
+    liftIO before
+    r <- action
+    liftIO after
+    pure r
+
+
+
+
 
 
