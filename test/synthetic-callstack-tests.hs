@@ -1,7 +1,9 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -13,6 +15,7 @@
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
@@ -20,10 +23,6 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE DerivingStrategies #-}
-{-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DeriveAnyClass #-}
 
 module Main (main) where
 
@@ -31,6 +30,7 @@ import Control.Arrow (Kleisli (..))
 import Control.Exception
 import Control.Monad.Dep
 import Control.Monad.Dep.Class
+import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Cont
 import Control.Monad.Writer
@@ -59,29 +59,29 @@ import Dep.Has
 import Dep.SimpleAdvice
 import Dep.SimpleAdvice.Basic
 import GHC.Generics (Generic)
-import GHC.Generics (Generic)
 import GHC.TypeLits
 import System.IO
 import Test.Tasty
 import Test.Tasty.HUnit
-import Data.Typeable
 import Prelude hiding (insert, log, lookup)
-import Control.Monad.IO.Unlift
 
 -- The interfaces
 newtype Logger m = Logger
   { emitMsg :: String -> m ()
-  } deriving stock Generic
+  }
+  deriving stock (Generic)
 
 data Repository m = Repository
   { insert :: Int -> m (),
     lookup :: Int -> m Bool
-  } deriving stock Generic
+  }
+  deriving stock (Generic)
 
-data Controller m = Controller
+newtype Controller m = Controller
   { -- insert one, lookup the other. Nonsensical, but good for an example.
     route :: Int -> Int -> m Bool
-  } deriving stock Generic
+  }
+  deriving stock (Generic)
 
 -- The implementations
 
@@ -120,83 +120,119 @@ makeController (asCall -> call) =
         call lookup toLookup
     }
 
--- The environment
+-- This is framework code.
 --
-
-data Env h m = Env {
-        logger :: h (Logger m)
-    ,   repository :: h (Repository m)
-    ,   controller :: h (Controller m)
-    }
-    deriving stock Generic
-    deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
-
-deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity m) => Has r_ m (Env Identity m)
-
--- 
---
-type Configurator = Kleisli Parser Value
-
-parseConf :: FromJSON a => Configurator a
-parseConf = Kleisli parseJSON
-
-type Allocator = ContT () IO
-
-type Phases env_ m = Allocator `Compose` Constructor env_ m
-
--- 
---
+-- It doesn't know about the exact datatypes the business logic uses,
+-- or about the arity of methods in the business logic.
 
 type StackTrace = [(TypeRep, String)]
 
-data SyntheticCallStackException = 
-    SyntheticCallStackException IOException StackTrace 
-    deriving Show
+data SyntheticCallStackException
+  = SyntheticCallStackException IOException StackTrace
+  deriving (Show)
+
 instance Exception SyntheticCallStackException
 
-keepSyntheticStack :: (MonadUnliftIO m, MonadReader StackTrace m) 
-    => NonEmpty (TypeRep, String)
-    -> Advice ca m r
+keepSyntheticStack ::
+  (MonadUnliftIO m, MonadReader StackTrace m) =>
+  NonEmpty (TypeRep, String) ->
+  Advice ca m r
 keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
-    currentStack <- ask
-    withRunInIO \unlift -> do
-        er <- try @IOException (unlift (local (method :) action))
-        case er of
-            Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
-            Right r -> pure r
+  currentStack <- ask
+  withRunInIO \unlift -> do
+    er <- try @IOException (unlift (local (method :) action))
+    case er of
+      Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
+      Right r -> pure r
+
+bombAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
+bombAt i = ContT $ bracket (newIORef bombs) pure
+  where
+    bombs =
+      ( replicate i (pure ()) ++ repeat (throwIO (userError "oops")),
+        repeat (pure ())
+      )
+
+-- Here we define our dependency injection environment.
+--
+-- We list which components from part of the application.
+--
+
+data Env h m = Env
+  { logger :: h (Logger m),
+    repository :: h (Repository m),
+    controller :: h (Controller m)
+  }
+  deriving stock (Generic)
+  deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
+
+deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity m) => Has r_ m (Env Identity m)
+
+-- The "phases" that components go through until fully build. Each phase
+-- is represented as an applicative functor. The succession of phases is
+-- defined using Data.Functor.Compose.
+--
+
+-- A phase in which we might allocate some resource needed by the component,
+-- also set some bracket-like resource management. 
+type Allocator = ContT () IO
+
+-- First we allocate any needed resource, then we have a construction phase
+-- during which the component reads its own dependencies from the environment.
+--
+-- There could be more phases, like an initial "read configuration" phase for example.
+type Phases env_ m = Allocator `Compose` Constructor env_ m
 
 -- Environment value
 --
-bombAt :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
-bombAt i = ContT $ bracket (newIORef bombs) pure
-    where
-    bombs = ( replicate i (pure ()) ++ repeat (throwIO (userError "oops"))
-            , repeat (pure ())
-            )
-
 env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
-env = Env {
-      logger = 
+env =
+  Env
+    { logger =
         bombAt 1 `bindPhase` \ref ->
-        constructor (\_ -> makeStdoutLogger) <&> 
-        advising (adviseRecord @Top @Top \method -> 
-            injectFailures ref)
-    , repository = 
-        allocateSet `bindPhase` \ref -> 
-        constructor (makeInMemoryRepository ref)
-    , controller = 
-        skipPhase $
-        constructor makeController
+          constructor (\_ -> makeStdoutLogger)
+            <&> advising
+              ( adviseRecord @Top @Top \method ->
+                  keepSyntheticStack method <> injectFailures ref
+              ),
+      repository =
+        allocateSet `bindPhase` \ref ->
+          constructor (makeInMemoryRepository ref)
+            <&> advising
+              ( adviseRecord @Top @Top \method ->
+                  keepSyntheticStack method
+              ),
+      controller =
+        skipPhase @Allocator $
+          constructor makeController
+            <&> advising
+              ( adviseRecord @Top @Top \method ->
+                  keepSyntheticStack method
+              )
     }
 
 --
 --
 --
+--
+testSyntheticCallStack :: Assertion
+testSyntheticCallStack = do
+  runContT (pullPhase @Allocator env) \constructors -> do
+    let (asCall -> call) = fixEnv constructors
+    flip
+      runReaderT
+      []
+      ( do
+          _ <- call route 1 2
+          pure ()
+      )
+
 tests :: TestTree
 tests =
   testGroup
     "All"
-    []
+    [ testCase "synthetic call stack" testSyntheticCallStack
+    ]
 
 main :: IO ()
 main = defaultMain tests
