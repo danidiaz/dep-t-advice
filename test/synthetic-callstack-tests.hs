@@ -66,6 +66,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Data.Typeable
 import Prelude hiding (insert, log, lookup)
+import Control.Monad.IO.Unlift
 
 -- The interfaces
 newtype Logger m = Logger
@@ -152,6 +153,17 @@ data SyntheticCallStackException =
     SyntheticCallStackException IOException StackTrace 
     deriving Show
 instance Exception SyntheticCallStackException
+
+keepSyntheticStack :: (MonadUnliftIO m, MonadReader StackTrace m) 
+    => NonEmpty (TypeRep, String)
+    -> Advice ca m r
+keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
+    currentStack <- ask
+    withRunInIO \unlift -> do
+        er <- try @IOException (unlift (local (method :) action))
+        case er of
+            Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
+            Right r -> pure r
 
 -- Environment value
 --

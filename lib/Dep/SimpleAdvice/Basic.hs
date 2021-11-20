@@ -133,8 +133,6 @@ doCachingBadly cacheLookup cachePut = makeAdvice \args ->
 --
 -- A better implementation of this advice would likely use the \"async\"
 -- package instead of bare `forkIO`. 
---
--- The @IO@ monad could be generalized to @MonadUnliftIO@.
 doAsyncBadly :: forall ca m . MonadUnliftIO m => Advice ca m ()
 doAsyncBadly = makeExecutionAdvice \action -> do
     _ <- withRunInIO (\unlift -> forkIO (unlift action))
