@@ -133,6 +133,8 @@ through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.4.6.0/docs/Contro
 
 There are conversion functions between the two versions of `Advice`.
 
+See [this thread](https://discourse.haskell.org/t/decorate-your-records-of-functions-with-this-weird-trick/3675) in the Haskell Discourse for more info.
+
 ## Historical aside
 
 According to Wikipedia, the term "advice" in the sense of aspect-oriented

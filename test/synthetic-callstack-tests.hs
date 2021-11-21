@@ -144,8 +144,8 @@ type StackFrame = (TypeRep, MethodName)
 type StackTrace = [StackFrame]
 
 data SyntheticCallStackException
-  = SyntheticCallStackException IOException StackTrace
-  deriving stock (Eq, Show)
+  = SyntheticCallStackException SomeException StackTrace
+  deriving stock Show
 
 instance Exception SyntheticCallStackException
 
@@ -156,16 +156,20 @@ instance HasSyntheticCallStack StackTrace  where
     callStack = id
 
 keepCallStack ::
-  (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv) =>
+  (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
+  (SomeException -> Maybe e) ->
   NonEmpty (TypeRep, MethodName) ->
   Advice ca m r
-keepCallStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
+keepCallStack selector (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
   currentStack <- asks (view callStack)
   withRunInIO \unlift -> do
-    er <- try @IOException (unlift (local (over callStack (method :)) action))
+    er <- tryJust selector (unlift (local (over callStack (method :)) action))
     case er of
-      Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
+      Left e -> throwIO (SyntheticCallStackException (toException e) (method : currentStack))
       Right r -> pure r
+
+ioEx :: SomeException -> Maybe IOError
+ioEx = fromException @IOError
 
 allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
 allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
@@ -214,21 +218,21 @@ env =
           constructor (\_ -> makeStdoutLogger)
             <&> advising
               ( adviseRecord @Top @Top \method ->
-                  keepCallStack method <> injectFailures bombs
+                  keepCallStack ioEx method <> injectFailures bombs
               ),
       repository =
         allocateSet `bindPhase` \ref ->
           constructor (makeInMemoryRepository ref)
             <&> advising
               ( adviseRecord @Top @Top \method ->
-                  keepCallStack method
+                  keepCallStack ioEx method
               ),
       controller =
         skipPhase @Allocator $
           constructor makeController
             <&> advising
               ( adviseRecord @Top @Top \method ->
-                  keepCallStack method
+                  keepCallStack ioEx method
               )
     }
 
@@ -252,32 +256,33 @@ env' =
     { logger =
         allocateBombs 1 `bindPhase` \bombs ->
           Identity (A.component (\_ -> makeStdoutLogger))
-            <&> A.adviseRecord @Top @Top \method ->
-              A.fromSimple_ (keepCallStack method <> injectFailures bombs)
+            <&> A.adviseRecord @Top @Top 
+                \method ->
+              A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs)
     , repository =
         allocateSet `bindPhase` \ref ->
           Identity (A.component (makeInMemoryRepository ref))
             <&> A.adviseRecord @Top @Top \method ->
-              A.fromSimple_ (keepCallStack method)
+              A.fromSimple_ (keepCallStack ioEx method)
     , controller =
         skipPhase @Allocator $
           Identity (A.component makeController)
             <&> A.adviseRecord @Top @Top \method ->
-              A.fromSimple_ (keepCallStack method)
+              A.fromSimple_ (keepCallStack ioEx method)
     }
 
 --
 --
 --
 --
-expectedException :: SyntheticCallStackException
+expectedException :: (IOError, StackTrace)
 expectedException =
-  SyntheticCallStackException
-    (userError "oops")
-    [ (typeRep (Proxy @Logger), "emitMsg"),
-      (typeRep (Proxy @Repository), "insert"),
-      (typeRep (Proxy @Controller), "route")
-    ]
+    ( userError "oops"
+    , [ (typeRep (Proxy @Logger), "emitMsg"),
+        (typeRep (Proxy @Repository), "insert"),
+        (typeRep (Proxy @Controller), "route")
+      ]
+    )
 
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
@@ -293,7 +298,8 @@ testSyntheticCallStack = do
             )
   me <- try @SyntheticCallStackException action
   case me of
-    Left ex -> assertEqual "exception with callstack" expectedException ex
+    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) -> 
+        assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
 testSyntheticCallStack' :: Assertion
@@ -304,7 +310,8 @@ testSyntheticCallStack' = do
           pure ()
   me <- try @SyntheticCallStackException action
   case me of
-    Left ex -> assertEqual "exception with callstack" expectedException ex
+    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) -> 
+        assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
 tests :: TestTree
