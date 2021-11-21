@@ -240,22 +240,6 @@ callInfo = lens _callInfo (\(CallEnv _ ops) i' -> CallEnv i' ops)
 instance Has r_ m (e_ m) => Has r_ m (CallEnv i e_ m) where
     dep = dep . _ops
 
-addStackFrame :: StackFrame -> CallEnv StackTrace e_ m -> CallEnv StackTrace e_ m
-addStackFrame frame (CallEnv stack env) = CallEnv (frame : stack) env
-
-keepSyntheticStack' ::
-  (MonadUnliftIO m) =>
-  Lens' (e_ (DepT e_ m)) StackTrace ->
-  NonEmpty (TypeRep, MethodName) ->
-  A.Advice ca e_ m r
-keepSyntheticStack' l (NonEmpty.head -> method) = A.makeExecutionAdvice \action -> do
-  currentStack <- asks (view l)
-  withRunInIO \unlift -> do
-    er <- try @IOException (unlift (local (over l (method :)) action))
-    case er of
-      Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
-      Right r -> pure r
-
 env' :: Env Phases' (DepT (CallEnv StackTrace (Env Identity)) IO) 
 env' =
   Env
@@ -263,21 +247,22 @@ env' =
         allocateBombs 1 `bindPhase` \bombs ->
           pure (A.component (\_ -> makeStdoutLogger))
             <&> ( A.adviseRecord @Top @Top \method ->
-                  keepSyntheticStack' callInfo method <> A.fromSimple (\_ -> injectFailures bombs)
+                  A.fromSimple (\_ -> keepSyntheticStack callInfo method) <> A.fromSimple (\_ -> injectFailures bombs)
               )
     , repository =
         allocateSet `bindPhase` \ref ->
           pure (A.component (makeInMemoryRepository ref))
             <&> ( A.adviseRecord @Top @Top \method ->
-                  keepSyntheticStack' callInfo method
+                  A.fromSimple (\_ -> keepSyntheticStack callInfo method)
               )
     , controller =
         skipPhase @Allocator $
           pure (A.component makeController)
             <&> ( A.adviseRecord @Top @Top \method ->
-                  keepSyntheticStack' callInfo method
+                  A.fromSimple (\_ -> keepSyntheticStack callInfo method)
               )
     }
+
 
 --
 --
