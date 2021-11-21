@@ -20,9 +20,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
+-- | An example of how an application can make use of the "dep-t" and
+-- "dep-t-advice" packages for keeping a "synthetic" call stack that tracks the
+-- invocations of monadic functions.
+--
+-- We are assuming that the application follows a "record-of-functions" style.
 module Main (main) where
 
-import Control.Arrow (Kleisli (..))
 import Control.Exception
 import Control.Monad.Dep (DepT)
 import Control.Monad.IO.Unlift
@@ -83,7 +87,12 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Prelude hiding (insert, lookup)
 
--- The interfaces
+
+-- THE BUSINESS LOGIC
+--
+--
+
+-- Component interfaces, defined as records polymorphic over the effect monad.
 newtype Logger m = Logger
   { emitMsg :: String -> m ()
   }
@@ -96,19 +105,22 @@ data Repository m = Repository
   deriving stock (Generic)
 
 newtype Controller m = Controller
-  { -- insert one, lookup the other. Nonsensical, but good for an example.
+  { -- insert one arg, look up the other. Nonsensical, but good enough for an example.
     route :: Int -> Int -> m Bool
   }
   deriving stock (Generic)
 
--- The implementations
-
+-- Component implementations, some of which depend on other componets.
+--
 makeStdoutLogger :: MonadIO m => Logger m
 makeStdoutLogger = Logger \msg -> liftIO $ putStrLn msg
 
+-- allocation helper
 allocateSet :: ContT () IO (IORef (Set Int))
 allocateSet = ContT $ bracket (newIORef Set.empty) pure
 
+-- When a component depends on another, it does so by taking an "env" parameter
+-- in the constructor and requiring 'Has' constraints on it.
 makeInMemoryRepository ::
   (Has Logger m env, MonadIO m) =>
   IORef (Set Int) ->
@@ -126,6 +138,11 @@ makeInMemoryRepository ref (asCall -> call) = do
         pure (Set.member key theSet)
     }
 
+-- This implementation of Controller depends both on the Logger and the
+-- Repository.
+--
+-- In general, the graph of dependencies between components can be a complex
+-- directed acyclic graph.
 makeController ::
   (Has Logger m env, Has Repository m env, Monad m) =>
   env ->
@@ -138,10 +155,15 @@ makeController (asCall -> call) =
         call lookup toLookup
     }
 
+-- THE COMPOSITION ROOT
+--
 -- Here we define our dependency injection environment.
 --
--- We list which components from part of the application.
+-- We put all the components which will form part of our application in an
+-- environment record. 
 --
+-- Each field is wrapped in a functor `h` which controls the "phases" we must
+-- go through in  the construction of the environment.
 data Env h m = Env
   { logger :: h (Logger m),
     repository :: h (Repository m),
@@ -150,6 +172,8 @@ data Env h m = Env
   deriving stock (Generic)
   deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
 
+-- Locate the components by their types. We could also define the required Has
+-- instance for each component manually.
 deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity m) => Has r_ m (Env Identity m)
 
 -- The "phases" that components go through until fully build. Each phase
@@ -164,11 +188,17 @@ type Allocator = ContT () IO
 -- First we allocate any needed resource, then we have a construction phase
 -- during which the component reads its own dependencies from the environment.
 --
--- There could be more phases, like an initial "read configuration" phase for example.
+-- There could be more phases, like for example an initial "read configuration"
+-- phase.
 type Phases env_ m = Allocator `Compose` Constructor env_ m
 
 -- Environment value
 --
+-- The base monad is a 'ReaderT' holding a StackTrace value which gets modified
+-- using "local" for each sub-call.
+--
+-- Notice that neither the interfaces nor the implementations which we defined
+-- earlier knew anything about the ReaderT.
 env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
 env =
   Env
@@ -195,9 +225,11 @@ env =
               )
     }
 
+-- Catch only IOExceptions for this example.
 ioEx :: SomeException -> Maybe IOError
 ioEx = fromException @IOError
 
+-- Allocate a supply of potentially exception-throwing actions.
 allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
 allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
   where
@@ -207,20 +239,42 @@ allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
       )
 
 
+-- THE COMPOSITION ROOT - ALTERNATIVE APPROACH
 --
+--
+-- Here we'll define the dependency injection environment in a slightly
+-- different way (but reusing both the "business logic" and the Env type).
+
+-- The basic idea is that we don't perform dependency injection as a separate
+-- Applicative phase (so no Constructor, but a mere Indentity phase). 
+--
+-- Instead, we shift that task into the base monad's environent. 
+
+-- As a result the "phases" are simpler:
 type Phases' = Allocator `Compose` Identity
 
+-- Now the expanded "runtime" environment will hold both the StackTrace and the
+-- components. We define this small helper datatype for that. It augments a
+-- preexisting environment with call-related info.
 data CallEnv i e_ m = CallEnv
   { _callInfo :: i,
     _ops :: e_ m
   }
 
+-- Delegate all 'Has' queries to the inner environment.
 instance Has r_ m (e_ m) => Has r_ m (CallEnv i e_ m) where
   dep = dep . _ops
 
 instance HasSyntheticCallStack (CallEnv StackTrace e_ m) where
     callStack = lens _callInfo (\(CallEnv _ ops) i' -> CallEnv i' ops)
 
+-- Here use the DepT monad (a variant of ReaderT) as the base monad.
+--
+-- The environment of DepT includes—just as before—the StackTrace value that is
+-- used to track each sub-call.
+--
+-- But now it also includes the dependency injection context with all the
+-- components.
 env' :: Env Phases' (DepT (CallEnv StackTrace (Env Identity)) IO)
 env' =
   Env
@@ -242,8 +296,7 @@ env' =
               A.fromSimple_ (keepCallStack ioEx method)
     }
 
---
---
+-- TESTS
 --
 --
 expectedException :: (IOError, StackTrace)
@@ -255,6 +308,7 @@ expectedException =
       ]
     )
 
+-- Test the" Constructor"-based version of the environment.
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
   let action =
@@ -273,6 +327,7 @@ testSyntheticCallStack = do
         assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
+-- Test the "DepT"-based version of the environment.
 testSyntheticCallStack' :: Assertion
 testSyntheticCallStack' = do
   let action =
