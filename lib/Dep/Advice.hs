@@ -109,6 +109,7 @@ module Dep.Advice
     -- * Interfacing with "simple" advices
     toSimple,
     fromSimple,
+    fromSimple_,
 
     -- * "sop-core" re-exports
     -- $sop
@@ -964,4 +965,8 @@ fromSimple makeAdvice = Advice \args -> do
             let SA.AspectT argsAction = f args
             (tweakExecution, args') <- argsAction
             pure (coerce tweakExecution, args')
+
+-- | Like 'fromSimple', but for 'Control.Monad.Dep.SimpleAdvice.Advice's that don't use the environment.
+fromSimple_ :: forall ca e_ m r. Monad m => SA.Advice ca (DepT e_ m) r -> Advice ca e_ m r
+fromSimple_ advice = fromSimple \_ -> advice
 

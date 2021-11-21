@@ -6,6 +6,8 @@
 
   The old modules still remain, but deprecated.
 
+* Added `fromSimple_`.
+
 ## 0.5.0.0 
 
 * The Advice type has changed to get rid of the existential type.
