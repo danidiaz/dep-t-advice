@@ -52,7 +52,7 @@ import Dep.Env
     skipPhase,
   )
 import Dep.Has
-  ( Has,
+  ( Has (dep),
     asCall,
   )
 import Dep.SimpleAdvice
@@ -137,7 +137,8 @@ makeController (asCall -> call) =
 
 type MethodName = String
 
-type StackTrace = [(TypeRep, MethodName)]
+type StackFrame = (TypeRep, MethodName)
+type StackTrace = [StackFrame]
 
 data SyntheticCallStackException
   = SyntheticCallStackException IOException StackTrace
@@ -158,10 +159,10 @@ keepSyntheticStack (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
       Right r -> pure r
 
 allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
-allocateBombs i = ContT $ bracket (newIORef bombs) pure
+allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
   where
     bombs =
-      ( replicate i (pure ()) ++ repeat (throwIO (userError "oops")),
+      ( replicate whenToBomb (pure ()) ++ repeat (throwIO (userError "oops")),
         repeat (pure ())
       )
 
@@ -225,64 +226,64 @@ env =
 --
 type Phases' = Allocator `Compose` Identity
 
-data Env' h m = Env'
-  { logger' :: h (Logger m),
-    repository' :: h (Repository m),
-    controller' :: h (Controller m), 
-    stack :: h (Constant StackTrace m)
-  }
-  deriving stock (Generic)
-  deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
+data CallEnv i e_ m = CallEnv {
+        _callInfo :: i
+    ,   _ops :: e_ m
+    }
 
-deriving via Autowired (Env' Identity m) instance Autowireable r_ m (Env' Identity m) => Has r_ m (Env' Identity m)
+instance Has r_ m (e_ m) => Has r_ m (CallEnv i e_ m) where
+    dep = dep . _ops
 
-addStackFrame :: (TypeRep, MethodName) -> Constant StackTrace z -> Constant StackTrace z 
-addStackFrame frame (Constant stack) = Constant (frame : stack)
-
-modifyStackField :: (Constant StackTrace m -> Constant StackTrace m) -> Env' Identity m -> Env' Identity m
-modifyStackField f env = env { stack = Identity (f (runIdentity (stack env))) }
+addStackFrame :: StackFrame -> CallEnv StackTrace e_ m -> CallEnv StackTrace e_ m
+addStackFrame frame (CallEnv stack env) = CallEnv (frame : stack) env
 
 keepSyntheticStack' ::
   (MonadUnliftIO m) =>
   NonEmpty (TypeRep, MethodName) ->
-  A.Advice ca (Env' Identity) m r
+  A.Advice ca (CallEnv StackTrace e_) m r
 keepSyntheticStack' (NonEmpty.head -> method) = A.makeExecutionAdvice \action -> do
-  Identity (Constant currentStack) <- asks stack
+  currentStack <- asks _callInfo
   withRunInIO \unlift -> do
-    er <- try @IOException (unlift (local (modifyStackField (addStackFrame method)) action))
+    er <- try @IOException (unlift (local (addStackFrame method) action))
     case er of
       Left e -> throwIO (SyntheticCallStackException e (method : currentStack))
       Right r -> pure r
 
-env' :: Env' Phases' (DepT (Env' Identity) IO) 
+env' :: Env Phases' (DepT (CallEnv StackTrace (Env Identity)) IO) 
 env' =
-  Env'
-    { logger' =
+  Env
+    { logger =
         allocateBombs 1 `bindPhase` \bombs ->
-          pure $ A.component (\_ -> makeStdoutLogger)
-            & ( A.adviseRecord @Top @Top \method ->
+          pure (A.component (\_ -> makeStdoutLogger))
+            <&> ( A.adviseRecord @Top @Top \method ->
                   keepSyntheticStack' method <> A.fromSimple (\_ -> injectFailures bombs)
               )
-    , repository' =
+    , repository =
         allocateSet `bindPhase` \ref ->
-          pure $ A.component (makeInMemoryRepository ref)
-            & ( A.adviseRecord @Top @Top \method ->
+          pure (A.component (makeInMemoryRepository ref))
+            <&> ( A.adviseRecord @Top @Top \method ->
                   keepSyntheticStack' method
               )
-    , controller' =
+    , controller =
         skipPhase @Allocator $
-          pure $ A.component makeController
-            & ( A.adviseRecord @Top @Top \method ->
+          pure (A.component makeController)
+            <&> ( A.adviseRecord @Top @Top \method ->
                   keepSyntheticStack' method
               )
-    , stack = skipPhase @Allocator $
-        pure $ Constant []
     }
 
 --
 --
 --
 --
+expectedException :: SyntheticCallStackException
+expectedException = SyntheticCallStackException
+  (userError "oops")
+  [ (typeRep (Proxy @Logger), "emitMsg"),
+    (typeRep (Proxy @Repository), "insert"),
+    (typeRep (Proxy @Controller), "route")
+  ]
+
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
   let action =
@@ -295,14 +296,6 @@ testSyntheticCallStack = do
                 _ <- call route 1 2
                 pure ()
             )
-      expectedException =
-        SyntheticCallStackException
-          (userError "oops")
-          [ (typeRep (Proxy @Logger), "emitMsg"),
-            (typeRep (Proxy @Repository), "insert"),
-            (typeRep (Proxy @Controller), "route")
-          ]
-
   me <- try @SyntheticCallStackException action
   case me of
     Left ex -> assertEqual "exception with callstack" expectedException ex
@@ -313,15 +306,8 @@ testSyntheticCallStack' :: Assertion
 testSyntheticCallStack' = do
   let action =
         runContT (pullPhase @Allocator env') \runnable -> do
-          _ <- A.runFromDep (pure runnable) route 1 2 
+          _ <- A.runFromDep (pure (CallEnv [] runnable)) route 1 2 
           pure ()
-      expectedException =
-        SyntheticCallStackException
-          (userError "oops")
-          [ (typeRep (Proxy @Logger), "emitMsg"),
-            (typeRep (Proxy @Repository), "insert"),
-            (typeRep (Proxy @Controller), "route")
-          ]
   me <- try @SyntheticCallStackException action
   case me of
     Left ex -> assertEqual "exception with callstack" expectedException ex
