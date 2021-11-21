@@ -120,18 +120,18 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
-## What about `Control.Monad.Dep.SimpleAdvice`?
+## What about `Dep.SimpleAdvice`?
 
-`Advice`s form `Control.Monad.Dep.Advice` work with the `DepT` monad, but
+`Advice`s form `Dep.Advice` work with the `DepT` monad, but
 that's a bit too specialized. What if I want to use plain `IO` as the monad
 which parameterizes my record-of-functions?
 
-`Control.Monad.Dep.SimpleAdvice` provides a version of the `Advice` type that
+`Dep.SimpleAdvice` provides a version of the `Advice` type that
 works with records-of-functions parameterized with `IO` or other concrete
 monads. 
 
 This simpler `Advice` can be useful when performing dependency injection
-through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.4.6.0/docs/Control-Monad-Dep-Env.html#g:9).
+through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.5.0.0/docs/Control-Monad-Dep-Env.html#v:fixEnv).
 
 There are conversion functions between the two versions of `Advice`.
 
