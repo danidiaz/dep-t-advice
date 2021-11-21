@@ -6,6 +6,8 @@ handling cross-cutting concerns in your application by adding "advices" to the
 functions in your record-of-functions, in a way that is composable and
 independent of each function's particular number of arguments.
 
+[![dep-t-advice.png](https://i.postimg.cc/L8Cm279S/dep-t-advice.png)](https://postimg.cc/tsxKzBnv)
+
 ## Rationale
 
 So, you have decided to structure your program in a record-of-functions style,
