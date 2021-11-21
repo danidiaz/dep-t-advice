@@ -65,11 +65,19 @@ import Dep.SimpleAdvice
     advising,
     makeExecutionAdvice,
   )
+import Dep.SimpleAdvice.Basic 
+  (
+    MethodName,
+    StackFrame,
+    StackTrace,
+    SyntheticCallStackException (SyntheticCallStackException),
+    HasSyntheticCallStack (callStack),
+    keepCallStack
+  )
 import Dep.SimpleAdvice.Basic (injectFailures)
 import GHC.Generics (Generic)
 import GHC.TypeLits
-import Lens.Micro
-import Lens.Micro.Extras
+import Lens.Micro (Lens', lens)
 import System.IO
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -130,55 +138,6 @@ makeController (asCall -> call) =
         call lookup toLookup
     }
 
--- This is framework code.
---
--- It doesn't know about the exact datatypes the business logic uses,
--- or about the arity of methods in the business logic.
---
--- It can be reused accross applications.
-
-type MethodName = String
-
-type StackFrame = (TypeRep, MethodName)
-
-type StackTrace = [StackFrame]
-
-data SyntheticCallStackException
-  = SyntheticCallStackException SomeException StackTrace
-  deriving stock Show
-
-instance Exception SyntheticCallStackException
-
-class HasSyntheticCallStack e where
-    callStack :: Lens' e StackTrace
-
-instance HasSyntheticCallStack StackTrace  where
-    callStack = id
-
-keepCallStack ::
-  (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
-  (SomeException -> Maybe e) ->
-  NonEmpty (TypeRep, MethodName) ->
-  Advice ca m r
-keepCallStack selector (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
-  currentStack <- asks (view callStack)
-  withRunInIO \unlift -> do
-    er <- tryJust selector (unlift (local (over callStack (method :)) action))
-    case er of
-      Left e -> throwIO (SyntheticCallStackException (toException e) (method : currentStack))
-      Right r -> pure r
-
-ioEx :: SomeException -> Maybe IOError
-ioEx = fromException @IOError
-
-allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
-allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
-  where
-    bombs =
-      ( replicate whenToBomb (pure ()) ++ repeat (throwIO (userError "oops")),
-        repeat (pure ())
-      )
-
 -- Here we define our dependency injection environment.
 --
 -- We list which components from part of the application.
@@ -235,6 +194,18 @@ env =
                   keepCallStack ioEx method
               )
     }
+
+ioEx :: SomeException -> Maybe IOError
+ioEx = fromException @IOError
+
+allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
+allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
+  where
+    bombs =
+      ( replicate whenToBomb (pure ()) ++ repeat (throwIO (userError "oops")),
+        repeat (pure ())
+      )
+
 
 --
 type Phases' = Allocator `Compose` Identity

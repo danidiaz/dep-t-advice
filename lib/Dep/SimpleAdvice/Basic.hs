@@ -8,12 +8,18 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 -- |
 -- This module contains basic examples advices.
 --
 -- __/BEWARE!/__ These are provided for illustrative purposes only, they
 -- strive for simplicity and not robustness or efficiency.
+--
+-- They can be converted to @DepT@-based 'Dep.Advice.Advice's using 'Dep.Advice.fromSimple'.
 module Dep.SimpleAdvice.Basic
   ( -- * Basic advices
     returnMempty,
@@ -21,22 +27,36 @@ module Dep.SimpleAdvice.Basic
     AnyEq (..),
     doCachingBadly,
     doAsyncBadly,
-    injectFailures
+    injectFailures,
+    -- ** Synthetic call stacks
+    MethodName,
+    StackFrame,
+    StackTrace,
+    SyntheticCallStackException (..),
+    HasSyntheticCallStack (..),
+    keepCallStack
   )
 where
 
 import Dep.SimpleAdvice
+import Control.Monad.Reader
 import Control.Monad.Trans
 import Data.Proxy
+import Data.Functor.Constant
+import Data.Functor.Identity
 import Data.SOP
 import Data.SOP (hctraverse_)
 import Data.SOP.NP
 import Data.Type.Equality
 import System.IO
-import Type.Reflection
 import Control.Concurrent
 import Control.Monad.IO.Unlift
 import Data.IORef
+import Control.Exception
+import Type.Reflection
+import qualified Data.Typeable as T
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NonEmpty
 
 -- $setup
 --
@@ -154,7 +174,41 @@ injectFailures ref = makeExecutionAdvice \action -> do
     pure r
 
 
+-- Synthetic call stacks
+type MethodName = String
 
+type StackFrame = (T.TypeRep, MethodName)
+
+type StackTrace = [StackFrame]
+
+data SyntheticCallStackException
+  = SyntheticCallStackException SomeException StackTrace
+  deriving stock Show
+
+instance Exception SyntheticCallStackException
+
+class HasSyntheticCallStack e where
+    -- | A lens from the environment to the call stack.
+    callStack :: forall f . Functor f => (StackTrace -> f StackTrace) -> e -> f e
+
+instance HasSyntheticCallStack StackTrace  where
+    callStack = id
+
+keepCallStack ::
+  (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
+  (SomeException -> Maybe e) ->
+  NonEmpty (T.TypeRep, MethodName) ->
+  Advice ca m r
+keepCallStack selector (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
+  currentStack <- asks (view callStack)
+  withRunInIO \unlift -> do
+    er <- tryJust selector (unlift (local (over callStack (method :)) action))
+    case er of
+      Left e -> throwIO (SyntheticCallStackException (toException e) (method : currentStack))
+      Right r -> pure r
+  where
+  view l = getConstant . l Constant
+  over l f = runIdentity . l (Identity . f)
 
 
 
