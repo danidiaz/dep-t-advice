@@ -175,18 +175,26 @@ injectFailures ref = makeExecutionAdvice \action -> do
 
 
 -- Synthetic call stacks
+--
+
+
 type MethodName = String
 
+-- | The typeable representation of the record which contains the invoked
+-- function, along with the field name of the invoked function.
 type StackFrame = (T.TypeRep, MethodName)
 
 type StackTrace = [StackFrame]
 
+-- | Wraps an exception along with a 'StackTrace'.
 data SyntheticCallStackException
   = SyntheticCallStackException SomeException StackTrace
   deriving stock Show
 
 instance Exception SyntheticCallStackException
 
+-- | Class of environments that carry a 'StackTrace' value that can be
+-- modified.
 class HasSyntheticCallStack e where
     -- | A lens from the environment to the call stack.
     callStack :: forall f . Functor f => (StackTrace -> f StackTrace) -> e -> f e
@@ -194,9 +202,23 @@ class HasSyntheticCallStack e where
 instance HasSyntheticCallStack StackTrace  where
     callStack = id
 
+-- | If the environment carries a 'StackTrace', make advised functions add
+-- themselves to the 'StackTrace' before they start executing.
+--
+-- This 'Dep.SimpleAdvice.Advice' requires a reader-like base monad to work. It
+-- doesn't need to be 'Control.Monad.Dep.DepT', it can be regular a
+-- 'Control.Monad.Reader.ReaderT'.
+--
+-- Caught exceptions are rethrown wrapped in 'SyntheticCallStackException's,
+-- with the current 'StackTrace' added.
 keepCallStack ::
   (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
+  -- | A selector for the kinds of exceptions we want to catch.
+  -- For example @fromException \@IOError@.
   (SomeException -> Maybe e) ->
+  -- | The path to the current component/method in the environment. Only the
+  -- head is used. It will be usually obtained through
+  -- 'Dep.SimpleAdvice.adviseRecord'.
   NonEmpty (T.TypeRep, MethodName) ->
   Advice ca m r
 keepCallStack selector (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
