@@ -207,25 +207,28 @@ env =
   Env
     { logger =
         allocateBombs 1 `bindPhase` \bombs ->
-          constructor (\_ -> makeStdoutLogger)
-            <&> advising
-              ( adviseRecord @Top @Top \method ->
-                  keepCallStack ioEx method <> injectFailures bombs
-              ),
+          constructor \_ ->
+            makeStdoutLogger
+              & advising
+                ( adviseRecord @Top @Top \method ->
+                    keepCallStack ioEx method <> injectFailures bombs
+                ),
       repository =
         allocateSet `bindPhase` \ref ->
-          constructor (makeInMemoryRepository ref)
-            <&> advising
-              ( adviseRecord @Top @Top \method ->
-                  keepCallStack ioEx method
-              ),
+          constructor \env ->
+            makeInMemoryRepository ref env
+              & advising
+                ( adviseRecord @Top @Top \method ->
+                    keepCallStack ioEx method
+                ),
       controller =
         skipPhase @Allocator $
-          constructor makeController
-            <&> advising
-              ( adviseRecord @Top @Top \method ->
-                  keepCallStack ioEx method
-              )
+          constructor \env ->
+            makeController env
+              & advising
+                ( adviseRecord @Top @Top \method ->
+                    keepCallStack ioEx method
+                )
     }
 
 -- Catch only IOExceptions for this example.
@@ -282,22 +285,22 @@ env' =
   Env
     { logger =
         allocateBombs 1 `bindPhase` \bombs ->
-          Identity (A.component \_ -> makeStdoutLogger)
-            <&> ( A.adviseRecord @Top @Top \method ->
-                    A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs)
-                ),
+          Identity $ A.component \_ ->
+            makeStdoutLogger
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
       repository =
         allocateSet `bindPhase` \ref ->
-          Identity (A.component (makeInMemoryRepository ref))
-            <&> ( A.adviseRecord @Top @Top \method ->
-                    A.fromSimple_ (keepCallStack ioEx method)
-                ),
+          Identity $ A.component \env ->
+            makeInMemoryRepository ref env
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method),
       controller =
         skipPhase @Allocator $
-          Identity (A.component makeController)
-            <&> ( A.adviseRecord @Top @Top \method ->
-                    A.fromSimple_ (keepCallStack ioEx method)
-                )
+          Identity $ A.component \env ->
+            makeController env
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method)
     }
 
 -- TESTS
