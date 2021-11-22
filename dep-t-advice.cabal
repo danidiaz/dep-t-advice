@@ -1,7 +1,7 @@
 cabal-version:       3.0
 
 name:                dep-t-advice
-version:             0.5.0.0
+version:             0.5.1.0
 synopsis:            Giving good advice to functions in records-of-functions.
 description:         
                      Companion to the dep-t package. Easily add behaviour to
@@ -54,11 +54,16 @@ common common-tasty
 
 library
   import: common
-  exposed-modules:     Control.Monad.Dep.Advice
+  exposed-modules:     Dep.Advice
+                       Dep.Advice.Basic
+                       Dep.SimpleAdvice
+                       Dep.SimpleAdvice.Basic
+                       -- deprecated
+                       Control.Monad.Dep.Advice
                        Control.Monad.Dep.Advice.Basic
                        Control.Monad.Dep.SimpleAdvice
                        Control.Monad.Dep.SimpleAdvice.Basic
-  other-modules:       Control.Monad.Dep.SimpleAdvice.Internal    
+  other-modules:       Dep.SimpleAdvice.Internal    
                         
   hs-source-dirs:      lib 
 
@@ -81,13 +86,20 @@ test-suite simple-advice-tests
   build-depends:       
                        barbies            ^>= 2.0.2.0
 
-
 test-suite tests-has-conversion
   import:              common-tasty
   type:                exitcode-stdio-1.0
   main-is:             tests-has-conversion.hs
   build-depends:       aeson,
                        containers
+
+test-suite synthetic-callstack-tests
+  import:              common-tasty
+  type:                exitcode-stdio-1.0
+  main-is:             synthetic-callstack-tests.hs
+  build-depends:       aeson,
+                       containers,
+                       microlens ^>= 0.4.12.0
 
 -- VERY IMPORTANT for doctests to work: https://stackoverflow.com/a/58027909/1364288
 -- http://hackage.haskell.org/package/cabal-doctest

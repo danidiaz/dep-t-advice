@@ -6,6 +6,8 @@ handling cross-cutting concerns in your application by adding "advices" to the
 functions in your record-of-functions, in a way that is composable and
 independent of each function's particular number of arguments.
 
+[![dep-t-advice.png](https://i.postimg.cc/L8Cm279S/dep-t-advice.png)](https://postimg.cc/tsxKzBnv)
+
 ## Rationale
 
 So, you have decided to structure your program in a record-of-functions style,
@@ -118,20 +120,22 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
-## What about `Control.Monad.Dep.SimpleAdvice`?
+## What about `Dep.SimpleAdvice`?
 
-`Advice`s form `Control.Monad.Dep.Advice` work with the `DepT` monad, but
+`Advice`s form `Dep.Advice` work with the `DepT` monad, but
 that's a bit too specialized. What if I want to use plain `IO` as the monad
 which parameterizes my record-of-functions?
 
-`Control.Monad.Dep.SimpleAdvice` provides a version of the `Advice` type that
+`Dep.SimpleAdvice` provides a version of the `Advice` type that
 works with records-of-functions parameterized with `IO` or other concrete
 monads. 
 
 This simpler `Advice` can be useful when performing dependency injection
-through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.4.6.0/docs/Control-Monad-Dep-Env.html#g:9).
+through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.5.0.0/docs/Control-Monad-Dep-Env.html#v:fixEnv).
 
 There are conversion functions between the two versions of `Advice`.
+
+See [this thread](https://discourse.haskell.org/t/decorate-your-records-of-functions-with-this-weird-trick/3675) in the Haskell Discourse for more info.
 
 ## Historical aside
 

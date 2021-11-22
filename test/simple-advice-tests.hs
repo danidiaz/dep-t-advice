@@ -26,10 +26,10 @@ module Main (main) where
 
 import Prelude hiding (log)
 import Barbies
+import Dep.Has
+import Dep.SimpleAdvice
+import Dep.SimpleAdvice.Basic
 import Control.Monad.Dep
-import Control.Monad.Dep.SimpleAdvice
-import Control.Monad.Dep.SimpleAdvice.Basic
-import Control.Monad.Dep.Has
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.List.NonEmpty 
