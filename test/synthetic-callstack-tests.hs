@@ -22,7 +22,8 @@
 
 -- | An example of how an application can make use of the "dep-t" and
 -- "dep-t-advice" packages for keeping a "synthetic" call stack that tracks the
--- invocations of monadic functions.
+-- invocations of monadic functions—though only of those which take part in dependency
+-- injection.
 --
 -- We are assuming that the application follows a "record-of-functions" style.
 module Main (main) where
@@ -33,7 +34,7 @@ import Control.Monad.IO.Unlift
 import Control.Monad.Reader
 import Control.Monad.Trans.Cont
 import Data.Function ((&))
-import Data.Functor (($>), (<&>))
+import Data.Functor ((<&>))
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Identity
@@ -73,7 +74,7 @@ import Dep.SimpleAdvice.Basic
   (
     MethodName,
     StackFrame,
-    StackTrace,
+    SyntheticCallStack,
     SyntheticCallStackException (SyntheticCallStackException),
     HasSyntheticCallStack (callStack),
     keepCallStack
@@ -115,8 +116,8 @@ newtype Controller m = Controller
 makeStdoutLogger :: MonadIO m => Logger m
 makeStdoutLogger = Logger \msg -> liftIO $ putStrLn msg
 
--- allocation helper
-allocateSet :: ContT () IO (IORef (Set Int))
+-- allocation helper. 
+allocateSet :: Allocator (IORef (Set Int))
 allocateSet = ContT $ bracket (newIORef Set.empty) pure
 
 -- When a component depends on another, it does so by taking an "env" parameter
@@ -173,7 +174,7 @@ data Env h m = Env
   deriving anyclass (Phased, DemotableFieldNames, FieldsFindableByType)
 
 -- Locate the components by their types. We could also define the required Has
--- instance for each component manually.
+-- instance for each component manually, but that's tedious.
 deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity m) => Has r_ m (Env Identity m)
 
 -- The "phases" that components go through until fully build. Each phase
@@ -183,10 +184,12 @@ deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity
 
 -- A phase in which we might allocate some resource needed by the component,
 -- also set some bracket-like resource management.
+-- The "managed" library could be used instead of ContT.
 type Allocator = ContT () IO
 
 -- First we allocate any needed resource, then we have a construction phase
--- during which the component reads its own dependencies from the environment.
+-- during which the component reads its own dependencies from a "completed"
+-- environment.
 --
 -- There could be more phases, like for example an initial "read configuration"
 -- phase.
@@ -194,12 +197,12 @@ type Phases env_ m = Allocator `Compose` Constructor env_ m
 
 -- Environment value
 --
--- The base monad is a 'ReaderT' holding a StackTrace value which gets modified
+-- The base monad is a 'ReaderT' holding a SyntheticCallStack value which gets modified
 -- using "local" for each sub-call.
 --
 -- Notice that neither the interfaces nor the implementations which we defined
 -- earlier knew anything about the ReaderT.
-env :: Env (Phases Env (ReaderT StackTrace IO)) (ReaderT StackTrace IO)
+env :: Env (Phases Env (ReaderT SyntheticCallStack IO)) (ReaderT SyntheticCallStack IO)
 env =
   Env
     { logger =
@@ -253,9 +256,9 @@ allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
 -- As a result the "phases" are simpler:
 type Phases' = Allocator `Compose` Identity
 
--- Now the expanded "runtime" environment will hold both the StackTrace and the
--- components. We define this small helper datatype for that. It augments a
--- preexisting environment with call-related info.
+-- Now the expanded "runtime" environment will hold both the synthetic call
+-- stack and the components. We define this small helper datatype for that. It
+-- augments a preexisting environment with call-related info.
 data CallEnv i e_ m = CallEnv
   { _callInfo :: i,
     _ops :: e_ m
@@ -265,17 +268,17 @@ data CallEnv i e_ m = CallEnv
 instance Has r_ m (e_ m) => Has r_ m (CallEnv i e_ m) where
   dep = dep . _ops
 
-instance HasSyntheticCallStack (CallEnv StackTrace e_ m) where
+instance HasSyntheticCallStack (CallEnv SyntheticCallStack e_ m) where
     callStack = lens _callInfo (\(CallEnv _ ops) i' -> CallEnv i' ops)
 
 -- Here use the DepT monad (a variant of ReaderT) as the base monad.
 --
--- The environment of DepT includes—just as before—the StackTrace value that is
--- used to track each sub-call.
+-- The environment of DepT includes—just as before—the SyntheticCallStack value
+-- that is used to trace each sub-call.
 --
 -- But now it also includes the dependency injection context with all the
 -- components.
-env' :: Env Phases' (DepT (CallEnv StackTrace (Env Identity)) IO)
+env' :: Env Phases' (DepT (CallEnv SyntheticCallStack (Env Identity)) IO)
 env' =
   Env
     { logger =
@@ -299,7 +302,7 @@ env' =
 -- TESTS
 --
 --
-expectedException :: (IOError, StackTrace)
+expectedException :: (IOError, SyntheticCallStack)
 expectedException =
     ( userError "oops"
     , [ (typeRep (Proxy @Logger), "emitMsg"),
@@ -316,7 +319,7 @@ testSyntheticCallStack = do
           let (asCall -> call) = fixEnv constructors
           flip
             runReaderT
-            ([] :: StackTrace) -- the initial stack trace for the call
+            ([] :: SyntheticCallStack) -- the initial stack trace for the call
             ( do
                 _ <- call route 1 2
                 pure ()

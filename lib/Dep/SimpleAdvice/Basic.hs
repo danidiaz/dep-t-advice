@@ -31,7 +31,7 @@ module Dep.SimpleAdvice.Basic
     -- ** Synthetic call stacks
     MethodName,
     StackFrame,
-    StackTrace,
+    SyntheticCallStack,
     SyntheticCallStackException (..),
     HasSyntheticCallStack (..),
     keepCallStack
@@ -184,33 +184,35 @@ type MethodName = String
 -- function, along with the field name of the invoked function.
 type StackFrame = (T.TypeRep, MethodName)
 
-type StackTrace = [StackFrame]
+type SyntheticCallStack = [StackFrame]
 
--- | Wraps an exception along with a 'StackTrace'.
+-- | Wraps an exception along with a 'SyntheticCallStack'.
 data SyntheticCallStackException
-  = SyntheticCallStackException SomeException StackTrace
+  = SyntheticCallStackException SomeException SyntheticCallStack
   deriving stock Show
 
 instance Exception SyntheticCallStackException
 
--- | Class of environments that carry a 'StackTrace' value that can be
+-- | Class of environments that carry a 'SyntheticCallStack' value that can be
 -- modified.
 class HasSyntheticCallStack e where
     -- | A lens from the environment to the call stack.
-    callStack :: forall f . Functor f => (StackTrace -> f StackTrace) -> e -> f e
+    callStack :: forall f . Functor f => (SyntheticCallStack -> f SyntheticCallStack) -> e -> f e
 
-instance HasSyntheticCallStack StackTrace  where
+-- | The trivial case, useful when 'SyntheticCallStack' is the environment type
+-- of a 'Control.Monad.Reader.ReaderT'.
+instance HasSyntheticCallStack SyntheticCallStack where
     callStack = id
 
--- | If the environment carries a 'StackTrace', make advised functions add
--- themselves to the 'StackTrace' before they start executing.
+-- | If the environment carries a 'SyntheticCallStack', make advised functions add
+-- themselves to the 'SyntheticCallStack' before they start executing.
 --
 -- This 'Dep.SimpleAdvice.Advice' requires a reader-like base monad to work. It
 -- doesn't need to be 'Control.Monad.Dep.DepT', it can be regular a
 -- 'Control.Monad.Reader.ReaderT'.
 --
 -- Caught exceptions are rethrown wrapped in 'SyntheticCallStackException's,
--- with the current 'StackTrace' added.
+-- with the current 'SyntheticCallStack' added.
 keepCallStack ::
   (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
   -- | A selector for the kinds of exceptions we want to catch.
