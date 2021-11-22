@@ -70,16 +70,7 @@ import Dep.SimpleAdvice
     advising,
     makeExecutionAdvice,
   )
-import Dep.SimpleAdvice.Basic 
-  (
-    MethodName,
-    StackFrame,
-    SyntheticCallStack,
-    SyntheticCallStackException (SyntheticCallStackException),
-    HasSyntheticCallStack (callStack),
-    keepCallStack
-  )
-import Dep.SimpleAdvice.Basic (injectFailures)
+import Dep.SimpleAdvice.Basic (HasSyntheticCallStack (callStack), MethodName, StackFrame, SyntheticCallStack, SyntheticCallStackException (SyntheticCallStackException), injectFailures, keepCallStack)
 import GHC.Generics (Generic)
 import GHC.TypeLits
 import Lens.Micro (Lens', lens)
@@ -87,7 +78,6 @@ import System.IO
 import Test.Tasty
 import Test.Tasty.HUnit
 import Prelude hiding (insert, lookup)
-
 
 -- THE BUSINESS LOGIC
 --
@@ -116,7 +106,7 @@ newtype Controller m = Controller
 makeStdoutLogger :: MonadIO m => Logger m
 makeStdoutLogger = Logger \msg -> liftIO $ putStrLn msg
 
--- allocation helper. 
+-- allocation helper.
 allocateSet :: Allocator (IORef (Set Int))
 allocateSet = ContT $ bracket (newIORef Set.empty) pure
 
@@ -161,7 +151,7 @@ makeController (asCall -> call) =
 -- Here we define our dependency injection environment.
 --
 -- We put all the components which will form part of our application in an
--- environment record. 
+-- environment record.
 --
 -- Each field is wrapped in a functor `h` which controls the "phases" we must
 -- go through in  the construction of the environment.
@@ -241,7 +231,6 @@ allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
         repeat (pure ())
       )
 
-
 -- THE COMPOSITION ROOT - ALTERNATIVE APPROACH
 --
 --
@@ -249,9 +238,9 @@ allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
 -- different way (but reusing both the "business logic" and the Env type).
 
 -- The basic idea is that we don't perform dependency injection as a separate
--- Applicative phase (so no Constructor, but a mere Indentity phase). 
+-- Applicative phase (so no Constructor, but a mere Indentity phase).
 --
--- Instead, we shift that task into the base monad's environent. 
+-- Instead, we shift that task into the base monad's environent.
 
 -- As a result the "phases" are simpler:
 type Phases' = Allocator `Compose` Identity
@@ -269,7 +258,7 @@ instance Has r_ m (e_ m) => Has r_ m (CallEnv i e_ m) where
   dep = dep . _ops
 
 instance HasSyntheticCallStack (CallEnv SyntheticCallStack e_ m) where
-    callStack = lens _callInfo (\(CallEnv _ ops) i' -> CallEnv i' ops)
+  callStack = lens _callInfo (\(CallEnv _ ops) i' -> CallEnv i' ops)
 
 -- Here use the DepT monad (a variant of ReaderT) as the base monad.
 --
@@ -283,20 +272,22 @@ env' =
   Env
     { logger =
         allocateBombs 1 `bindPhase` \bombs ->
-          Identity (A.component (\_ -> makeStdoutLogger))
-            <&> A.adviseRecord @Top @Top 
-                \method ->
-              A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs)
-    , repository =
+          Identity (A.component \_ -> makeStdoutLogger)
+            <&> ( A.adviseRecord @Top @Top \method ->
+                    A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs)
+                ),
+      repository =
         allocateSet `bindPhase` \ref ->
           Identity (A.component (makeInMemoryRepository ref))
-            <&> A.adviseRecord @Top @Top \method ->
-              A.fromSimple_ (keepCallStack ioEx method)
-    , controller =
+            <&> ( A.adviseRecord @Top @Top \method ->
+                    A.fromSimple_ (keepCallStack ioEx method)
+                ),
+      controller =
         skipPhase @Allocator $
           Identity (A.component makeController)
-            <&> A.adviseRecord @Top @Top \method ->
-              A.fromSimple_ (keepCallStack ioEx method)
+            <&> ( A.adviseRecord @Top @Top \method ->
+                    A.fromSimple_ (keepCallStack ioEx method)
+                )
     }
 
 -- TESTS
@@ -304,12 +295,12 @@ env' =
 --
 expectedException :: (IOError, SyntheticCallStack)
 expectedException =
-    ( userError "oops"
-    , [ (typeRep (Proxy @Logger), "emitMsg"),
-        (typeRep (Proxy @Repository), "insert"),
-        (typeRep (Proxy @Controller), "route")
-      ]
-    )
+  ( userError "oops",
+    [ (typeRep (Proxy @Logger), "emitMsg"),
+      (typeRep (Proxy @Repository), "insert"),
+      (typeRep (Proxy @Controller), "route")
+    ]
+  )
 
 -- Test the" Constructor"-based version of the environment.
 testSyntheticCallStack :: Assertion
@@ -326,8 +317,8 @@ testSyntheticCallStack = do
             )
   me <- try @SyntheticCallStackException action
   case me of
-    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) -> 
-        assertEqual "exception with callstack" expectedException (ex, trace)
+    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
 -- Test the "DepT"-based version of the environment.
@@ -339,8 +330,8 @@ testSyntheticCallStack' = do
           pure ()
   me <- try @SyntheticCallStackException action
   case me of
-    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) -> 
-        assertEqual "exception with callstack" expectedException (ex, trace)
+    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
 tests :: TestTree
