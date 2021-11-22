@@ -101,7 +101,7 @@ newtype Controller m = Controller
   }
   deriving stock (Generic)
 
--- Component implementations, some of which depend on other componets.
+-- Component implementations, some of which depend on other components.
 --
 makeStdoutLogger :: MonadIO m => Logger m
 makeStdoutLogger = Logger \msg -> liftIO $ putStrLn msg
@@ -154,7 +154,9 @@ makeController (asCall -> call) =
 -- environment record.
 --
 -- Each field is wrapped in a functor `h` which controls the "phases" we must
--- go through in  the construction of the environment.
+-- go through in  the construction of the environment. When `h` becomes
+-- Identity, the environment is ready for use. (This is an example of the
+-- "Higer-Kinded Data" pattern.)
 data Env h m = Env
   { logger :: h (Logger m),
     repository :: h (Repository m),
@@ -167,7 +169,7 @@ data Env h m = Env
 -- instance for each component manually, but that's tedious.
 deriving via Autowired (Env Identity m) instance Autowireable r_ m (Env Identity m) => Has r_ m (Env Identity m)
 
--- The "phases" that components go through until fully build. Each phase
+-- The "phases" that components go through until fully built. Each phase
 -- is represented as an applicative functor. The succession of phases is
 -- defined using Data.Functor.Compose.
 --
@@ -223,7 +225,7 @@ ioEx :: SomeException -> Maybe IOError
 ioEx = fromException @IOError
 
 -- Allocate a supply of potentially exception-throwing actions.
-allocateBombs :: Int -> ContT () IO (IORef ([IO ()], [IO ()]))
+allocateBombs :: Int -> Allocator (IORef ([IO ()], [IO ()]))
 allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
   where
     bombs =
@@ -238,7 +240,7 @@ allocateBombs whenToBomb = ContT $ bracket (newIORef bombs) pure
 -- different way (but reusing both the "business logic" and the Env type).
 
 -- The basic idea is that we don't perform dependency injection as a separate
--- Applicative phase (so no Constructor, but a mere Indentity phase).
+-- Applicative phase (so no Constructor, but a mere Identity phase).
 --
 -- Instead, we shift that task into the base monad's environent.
 
@@ -302,12 +304,13 @@ expectedException =
     ]
   )
 
--- Test the" Constructor"-based version of the environment.
+-- Test the "Constructor"-based version of the environment.
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
   let action =
         runContT (pullPhase @Allocator env) \constructors -> do
-          let (asCall -> call) = fixEnv constructors
+          -- here we complete the construction of the environment
+          let (asCall -> call) = fixEnv constructors 
           flip
             runReaderT
             ([] :: SyntheticCallStack) -- the initial stack trace for the call
