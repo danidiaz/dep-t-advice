@@ -70,7 +70,15 @@ import Dep.SimpleAdvice
     advising,
     makeExecutionAdvice,
   )
-import Dep.SimpleAdvice.Basic (HasSyntheticCallStack (callStack), MethodName, StackFrame, SyntheticCallStack, SyntheticCallStackException (SyntheticCallStackException), injectFailures, keepCallStack)
+import Dep.SimpleAdvice.Basic
+  ( HasSyntheticCallStack (callStack),
+    MethodName,
+    StackFrame,
+    SyntheticCallStack,
+    SyntheticCallStackException (SyntheticCallStackException),
+    injectFailures,
+    keepCallStack,
+  )
 import GHC.Generics (Generic)
 import GHC.TypeLits
 import Lens.Micro (Lens', lens)
@@ -310,7 +318,7 @@ testSyntheticCallStack = do
   let action =
         runContT (pullPhase @Allocator env) \constructors -> do
           -- here we complete the construction of the environment
-          let (asCall -> call) = fixEnv constructors 
+          let (asCall -> call) = fixEnv constructors
           flip
             runReaderT
             ([] :: SyntheticCallStack) -- the initial stack trace for the call
