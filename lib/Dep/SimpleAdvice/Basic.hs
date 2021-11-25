@@ -32,8 +32,9 @@ module Dep.SimpleAdvice.Basic
     MethodName,
     StackFrame,
     SyntheticCallStack,
-    SyntheticCallStackException (..),
     HasSyntheticCallStack (..),
+    SyntheticStackTrace,
+    SyntheticStackTraceException (..),
     keepCallStack
   )
 where
@@ -182,16 +183,18 @@ type MethodName = String
 
 -- | The typeable representation of the record which contains the invoked
 -- function, along with the field name of the invoked function.
-type StackFrame = (T.TypeRep, MethodName)
+type StackFrame = NonEmpty (T.TypeRep, MethodName)
 
 type SyntheticCallStack = [StackFrame]
 
+type SyntheticStackTrace = NonEmpty StackFrame
+
 -- | Wraps an exception along with a 'SyntheticCallStack'.
-data SyntheticCallStackException
-  = SyntheticCallStackException SomeException SyntheticCallStack
+data SyntheticStackTraceException
+  = SyntheticStackTraceException SomeException SyntheticStackTrace
   deriving stock Show
 
-instance Exception SyntheticCallStackException
+instance Exception SyntheticStackTraceException
 
 -- | Class of environments that carry a 'SyntheticCallStack' value that can be
 -- modified.
@@ -211,24 +214,24 @@ instance HasSyntheticCallStack SyntheticCallStack where
 -- doesn't need to be 'Control.Monad.Dep.DepT', it can be regular a
 -- 'Control.Monad.Reader.ReaderT'.
 --
--- Caught exceptions are rethrown wrapped in 'SyntheticCallStackException's,
+-- Caught exceptions are rethrown wrapped in 'SyntheticStackTraceException's,
 -- with the current 'SyntheticCallStack' added.
 keepCallStack ::
   (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
   -- | A selector for the kinds of exceptions we want to catch.
   -- For example @fromException \@IOError@.
   (SomeException -> Maybe e) ->
-  -- | The path to the current component/method in the environment. Only the
-  -- head is used. It will be usually obtained through
+  -- | The path to the current component/method in the environment.
+  -- It will be usually obtained through
   -- 'Dep.SimpleAdvice.adviseRecord'.
   NonEmpty (T.TypeRep, MethodName) ->
   Advice ca m r
-keepCallStack selector (NonEmpty.head -> method) = makeExecutionAdvice \action -> do
+keepCallStack selector method = makeExecutionAdvice \action -> do
   currentStack <- asks (view callStack)
   withRunInIO \unlift -> do
     er <- tryJust selector (unlift (local (over callStack (method :)) action))
     case er of
-      Left e -> throwIO (SyntheticCallStackException (toException e) (method : currentStack))
+      Left e -> throwIO (SyntheticStackTraceException (toException e) (method :| currentStack))
       Right r -> pure r
   where
   view l = getConstant . l Constant

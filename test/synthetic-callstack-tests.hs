@@ -75,7 +75,8 @@ import Dep.SimpleAdvice.Basic
     MethodName,
     StackFrame,
     SyntheticCallStack,
-    SyntheticCallStackException (SyntheticCallStackException),
+    SyntheticStackTrace,
+    SyntheticStackTraceException (SyntheticStackTraceException),
     injectFailures,
     keepCallStack,
   )
@@ -306,12 +307,13 @@ env' =
 -- TESTS
 --
 --
-expectedException :: (IOError, SyntheticCallStack)
+expectedException :: (IOError, SyntheticStackTrace)
 expectedException =
   ( userError "oops",
-    [ (typeRep (Proxy @Logger), "emitMsg"),
-      (typeRep (Proxy @Repository), "insert"),
-      (typeRep (Proxy @Controller), "route")
+    NonEmpty.fromList
+    [ NonEmpty.fromList [(typeRep (Proxy @Logger), "emitMsg")],
+      NonEmpty.fromList [(typeRep (Proxy @Repository), "insert")],
+      NonEmpty.fromList [(typeRep (Proxy @Controller), "route")]
     ]
   )
 
@@ -329,9 +331,9 @@ testSyntheticCallStack = do
                 _ <- call route 1 2
                 pure ()
             )
-  me <- try @SyntheticCallStackException action
+  me <- try @SyntheticStackTraceException action
   case me of
-    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) ->
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
       assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
@@ -342,9 +344,9 @@ testSyntheticCallStack' = do
         runContT (pullPhase @Allocator env') \runnable -> do
           _ <- A.runFromDep (pure (CallEnv [] runnable)) route 1 2
           pure ()
-  me <- try @SyntheticCallStackException action
+  me <- try @SyntheticStackTraceException action
   case me of
-    Left (SyntheticCallStackException (fromException @IOError -> Just ex) trace) ->
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
       assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 

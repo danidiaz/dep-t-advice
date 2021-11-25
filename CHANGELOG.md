@@ -1,5 +1,16 @@
 # Revision history for dep-t-advice
 
+
+## 0.6.0.0 
+
+* SyntheticCallStackException renamed to SyntheticStackTraceException.
+  SyntheticStackTraceException now contains NonEmpty stack traces. 
+
+  Also, for each frame, the full path in the environment to the component is
+  provided. This is helpful for Dep.Tagged components.
+  
+  [Issue #18](https://github.com/danidiaz/dep-t-advice/issues/18).
+
 ## 0.5.1.0 
 
 * `Control.Monad.whatever` renamed to `whatever`. 
