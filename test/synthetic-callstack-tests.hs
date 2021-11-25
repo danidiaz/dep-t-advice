@@ -35,6 +35,7 @@ import Control.Monad.Reader
 import Control.Monad.Trans.Cont
 import Data.Function ((&))
 import Data.Functor ((<&>))
+import Control.Arrow ((>>>))
 import Data.Functor.Compose
 import Data.Functor.Constant
 import Data.Functor.Identity
@@ -62,6 +63,7 @@ import Dep.Has
   ( Has (dep),
     asCall,
   )
+import Dep.Tagged (Tagged (..), tagged, untag)
 import Dep.SimpleAdvice
   ( Advice,
     AspectT (..),
@@ -152,8 +154,24 @@ makeController (asCall -> call) =
     { route = \toInsert toLookup -> do
         call emitMsg "serving..."
         call insert toInsert
+        call emitMsg "before lookup..."
         call lookup toLookup
     }
+
+makeController2Loggers :: 
+  (Has Logger m env, 
+  Has (Tagged "secondary" Logger) m env, Has Repository m env, Monad m) =>
+  env ->
+  Controller m
+makeController2Loggers (asCall -> call) =
+  Controller
+    { route = \toInsert toLookup -> do
+        call (untag @"secondary" >>> emitMsg) "serving..."
+        call insert toInsert
+        call emitMsg "before lookup..."
+        call lookup toLookup
+    }
+
 
 -- THE COMPOSITION ROOT
 --
@@ -168,6 +186,7 @@ makeController (asCall -> call) =
 -- "Higer-Kinded Data" pattern.)
 data Env h m = Env
   { logger :: h (Logger m),
+    logger2 :: h (Tagged "secondary" Logger m),
     repository :: h (Repository m),
     controller :: h (Controller m)
   }
@@ -210,6 +229,14 @@ env =
         allocateBombs 1 `bindPhase` \bombs ->
           constructor \_ ->
             makeStdoutLogger
+              & advising
+                ( adviseRecord @Top @Top \method ->
+                    keepCallStack ioEx method <> injectFailures bombs
+                ),
+      logger2 =
+        allocateBombs 0 `bindPhase` \bombs ->
+          constructor \_ ->
+            tagged @"secondary" makeStdoutLogger
               & advising
                 ( adviseRecord @Top @Top \method ->
                     keepCallStack ioEx method <> injectFailures bombs
@@ -290,6 +317,12 @@ env' =
             makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
                 A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+      logger2 =
+        allocateBombs 0 `bindPhase` \bombs ->
+          Identity $ tagged @"secondary" $ A.component \_ ->
+            makeStdoutLogger
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
       repository =
         allocateSet `bindPhase` \ref ->
           Identity $ A.component \env ->
@@ -317,6 +350,18 @@ expectedException =
     ]
   )
 
+expectedExceptionTagged :: (IOError, SyntheticStackTrace)
+expectedExceptionTagged =
+  ( userError "oops",
+    NonEmpty.fromList
+    [ NonEmpty.fromList [
+                (typeRep (Proxy @Logger), "emitMsg")
+        ,       (typeRep (Proxy @(Tagged "secondary" Logger)), "unTagged")
+        ],
+      NonEmpty.fromList [(typeRep (Proxy @Controller), "route")]
+    ]
+  )
+
 -- Test the "Constructor"-based version of the environment.
 testSyntheticCallStack :: Assertion
 testSyntheticCallStack = do
@@ -337,6 +382,37 @@ testSyntheticCallStack = do
       assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
+-- Test the "Constructor"-based version of the environment.
+testSyntheticCallStackTagged :: Assertion
+testSyntheticCallStackTagged = do
+  let envz = env {
+          controller =
+            skipPhase @Allocator $
+              constructor \env ->
+                makeController2Loggers env
+                  & advising
+                    ( adviseRecord @Top @Top \method ->
+                        keepCallStack ioEx method
+                    )
+        }
+      action =
+        runContT (pullPhase @Allocator envz) \constructors -> do
+          -- here we complete the construction of the environment
+          let (asCall -> call) = fixEnv constructors
+          flip
+            runReaderT
+            ([] :: SyntheticCallStack) -- the initial stack trace for the call
+            ( do
+                _ <- call route 1 2
+                pure ()
+            )
+  me <- try @SyntheticStackTraceException action
+  case me of
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedExceptionTagged (ex, trace)
+    Right _ -> assertFailure "expected exception did not appear"
+
+
 -- Test the "DepT"-based version of the environment.
 testSyntheticCallStack' :: Assertion
 testSyntheticCallStack' = do
@@ -350,12 +426,34 @@ testSyntheticCallStack' = do
       assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
+testSyntheticCallStackTagged' :: Assertion
+testSyntheticCallStackTagged' = do
+  let envz = env' {
+          controller =
+            skipPhase @Allocator $
+              Identity $ A.component \env ->
+                makeController2Loggers env
+                  & A.adviseRecord @Top @Top \method ->
+                    A.fromSimple_ (keepCallStack ioEx method)
+        }
+      action =
+        runContT (pullPhase @Allocator envz) \runnable -> do
+          _ <- A.runFromDep (pure (CallEnv [] runnable)) route 1 2
+          pure ()
+  me <- try @SyntheticStackTraceException action
+  case me of
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedExceptionTagged (ex, trace)
+    Right _ -> assertFailure "expected exception did not appear"
+
 tests :: TestTree
 tests =
   testGroup
     "All"
     [ testCase "synthetic call stack" testSyntheticCallStack,
-      testCase "synthetic call stack - DepT" testSyntheticCallStack'
+      testCase "synthetic call stack with Tagged" testSyntheticCallStackTagged,
+      testCase "synthetic call stack - DepT" testSyntheticCallStack',
+      testCase "synthetic call stack with Tagged - DepT" testSyntheticCallStackTagged'
     ]
 
 main :: IO ()
