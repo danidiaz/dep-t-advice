@@ -319,8 +319,8 @@ env' =
                 A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
       logger2 =
         allocateBombs 0 `bindPhase` \bombs ->
-          Identity $ tagged @"secondary" $ A.component \_ ->
-            makeStdoutLogger
+          Identity $ A.component \_ ->
+            tagged @"secondary" makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
                 A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
       repository =
@@ -426,16 +426,6 @@ testSyntheticCallStack' = do
       assertEqual "exception with callstack" expectedException (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
--- Turns out there's a problem with the DepT version: the stack traces don't
--- show the full path, only the component at the tip. So, Tagged does not
--- appear for the logger.
---
--- The cause is the interaction between A.component and adviseRecord.
--- adviseRecord works over the un-tagged version, yet we can't put it *after*
--- performing tagging because A.component doesn't seem to work for nested
--- records (which is a big limitation it itself!)
---
--- Perhaps we need a specialized taggedComponent function?
 testSyntheticCallStackTagged' :: Assertion
 testSyntheticCallStackTagged' = do
   let envz = env' {
@@ -462,10 +452,8 @@ tests =
     "All"
     [ testCase "synthetic call stack" testSyntheticCallStack,
       testCase "synthetic call stack with Tagged" testSyntheticCallStackTagged,
-      testCase "synthetic call stack - DepT" testSyntheticCallStack'
-      -- ,
-      -- Anomaly / bug :( See comments in test.
-      -- testCase "synthetic call stack with Tagged - DepT" testSyntheticCallStackTagged'
+      testCase "synthetic call stack - DepT" testSyntheticCallStack',
+      testCase "synthetic call stack with Tagged - DepT" testSyntheticCallStackTagged'
     ]
 
 main :: IO ()

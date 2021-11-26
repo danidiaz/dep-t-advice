@@ -766,12 +766,58 @@ instance
 
 instance
   ( 
-    Functor m, 
-    Multicurryable as e_ m r advised
+    Functor m,
+    DistributiveSubcomponent (DiscriminateDistributiveSubcomponent advised) e_ m advised
   ) =>
   DistributiveProduct e_ m (G.S1 ( 'G.MetaSel msymbol su ss ds) (G.Rec0 advised))
   where
-  _distributeProduct f = G.M1 . G.K1 $ askFinalDepT @as @e_ @m @r (fmap (fmap (G.unK1 . G.unM1))  f)
+  _distributeProduct f = G.M1 . G.K1 $ _distributeSubcomponent @(DiscriminateDistributiveSubcomponent advised) @e_ @m @advised (fmap (fmap (G.unK1 . G.unM1))  f)
+
+-- Here we have dropped the polymorphic parameter in the last type argument.
+type DistributiveSubcomponent :: RecordComponent -> ((Type -> Type) -> Type) -> (Type -> Type) -> Type -> Constraint
+class DistributiveSubcomponent component_type e_ m sub where
+  _distributeSubcomponent ::  (e_ (DepT e_ m) -> m sub) -> sub
+
+instance
+  ( 
+    Functor m, 
+    Multicurryable as e_ m r advised
+  ) =>
+  DistributiveSubcomponent Terminal e_ m advised
+  where
+  _distributeSubcomponent f = askFinalDepT @as @e_ @m @r f
+
+instance
+  (
+  Functor m,
+  DistributiveSubcomponent (DiscriminateDistributiveSubcomponent advised) e_ m advised 
+  ) =>
+  DistributiveSubcomponent IWrapped e_ m (Identity advised)
+  where
+  _distributeSubcomponent f = Identity (_distributeSubcomponent @(DiscriminateDistributiveSubcomponent advised) @e_ @m (fmap (fmap runIdentity) f))
+
+instance
+  (
+  Functor m,
+  DistributiveSubcomponent (DiscriminateDistributiveSubcomponent advised) e_ m advised 
+  ) =>
+  DistributiveSubcomponent IWrapped e_ m (I advised)
+  where
+  _distributeSubcomponent f = I (_distributeSubcomponent @(DiscriminateDistributiveSubcomponent advised) @e_ @m (fmap (fmap unI) f))
+
+instance
+    (DistributiveRecord e_ m subrecord)
+    =>
+    DistributiveSubcomponent Recurse e_ m (subrecord (DepT e_ m)) where
+  _distributeSubcomponent f = _distribute @e_ @m f
+
+type DiscriminateDistributiveSubcomponent :: Type -> RecordComponent
+type family DiscriminateDistributiveSubcomponent c where
+  DiscriminateDistributiveSubcomponent (a -> b) = Terminal
+  DiscriminateDistributiveSubcomponent (DepT e_ m x) = Terminal
+  DiscriminateDistributiveSubcomponent (Identity _) = IWrapped
+  DiscriminateDistributiveSubcomponent (I _) = IWrapped
+  DiscriminateDistributiveSubcomponent _ = Recurse
 
 -- advising *all* fields of a record
 --
@@ -829,12 +875,6 @@ instance
      in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc' f advised))
 
 instance
-  AdvisedRecord ca e_ m cr advisable =>
-  AdvisedComponent Recurse ca e_ m cr (advisable (DepT e_ m))
-  where
-  _adviseComponent acc f advised = _adviseRecord @ca @e_ @m @cr acc f advised
-
-instance
   (Multicurryable as e_ m r advised, All ca as, cr r, Monad m) =>
   AdvisedComponent Terminal ca e_ m cr advised
   where
@@ -851,6 +891,13 @@ instance
   AdvisedComponent IWrapped ca e_ m cr (I advised)
   where
   _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e_ @m @cr acc f advised)
+
+instance
+  AdvisedRecord ca e_ m cr advisable =>
+  AdvisedComponent Recurse ca e_ m cr (advisable (DepT e_ m))
+  where
+  _adviseComponent acc f advised = _adviseRecord @ca @e_ @m @cr acc f advised
+
 
 -- | Gives 'Advice' to all the functions in a record-of-functions.
 --

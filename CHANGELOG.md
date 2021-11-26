@@ -11,6 +11,8 @@
   
   [Issue #18](https://github.com/danidiaz/dep-t-advice/issues/18).
 
+* `Dep.Advice.component` can now treat components with nested records.
+
 ## 0.5.1.0 
 
 * `Control.Monad.whatever` renamed to `whatever`. 
