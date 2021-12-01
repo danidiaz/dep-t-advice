@@ -213,7 +213,7 @@ type Allocator = ContT () IO
 --
 -- There could be more phases, like for example an initial "read configuration"
 -- phase.
-type Phases env_ m = Allocator `Compose` Constructor env_ m
+type Phases env = Allocator `Compose` Constructor env
 
 -- Environment value
 --
@@ -222,7 +222,7 @@ type Phases env_ m = Allocator `Compose` Constructor env_ m
 --
 -- Notice that neither the interfaces nor the implementations which we defined
 -- earlier knew anything about the ReaderT.
-env :: Env (Phases Env (ReaderT SyntheticCallStack IO)) (ReaderT SyntheticCallStack IO)
+env :: Env (Phases (Env Identity (ReaderT SyntheticCallStack IO))) (ReaderT SyntheticCallStack IO)
 env =
   Env
     { logger =
