@@ -13,6 +13,8 @@
 
 * `Dep.Advice.component` can now treat components with nested records.
 
+* Removed deprecated modules.
+
 ## 0.5.1.0 
 
 * `Control.Monad.whatever` renamed to `whatever`. 

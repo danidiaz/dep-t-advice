@@ -5,8 +5,8 @@ import Test.DocTest
 main =
   doctest
     [ "-ilib",
-      "lib/Control/Monad/Dep/Advice.hs"
-    , "lib/Control/Monad/Dep/Advice/Basic.hs"
-    , "lib/Control/Monad/Dep/SimpleAdvice.hs"
-    , "lib/Control/Monad/Dep/SimpleAdvice/Basic.hs"
+      "lib/Dep/Advice.hs"
+    , "lib/Dep/Advice/Basic.hs"
+    , "lib/Dep/SimpleAdvice.hs"
+    , "lib/Dep/SimpleAdvice/Basic.hs"
     ]
