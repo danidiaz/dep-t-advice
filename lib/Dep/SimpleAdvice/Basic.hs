@@ -12,6 +12,9 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 -- |
 -- This module contains basic examples advices.
@@ -58,6 +61,7 @@ import Type.Reflection
 import qualified Data.Typeable as T
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
+import Control.Monad.Dep (DepT)
 
 -- $setup
 --
@@ -196,6 +200,21 @@ data SyntheticStackTraceException
 
 instance Exception SyntheticStackTraceException
 
+-- | Monads that carry a SyntheticCallStack.
+class MonadCallStack m where
+  askCallStack :: m SyntheticCallStack
+  addStackFrame :: StackFrame -> m r -> m r
+
+instance (Monad m, HasSyntheticCallStack runenv) => MonadCallStack (ReaderT runenv m) where
+  askCallStack = asks (view callStack)
+  addStackFrame frame action = local (over callStack (frame :)) action
+
+instance (Monad m, HasSyntheticCallStack (e_ (DepT e_ m))) => MonadCallStack (DepT e_ m) where
+  askCallStack = asks (view callStack)
+  addStackFrame frame action = local (over callStack (frame :)) action
+
+deriving newtype instance MonadCallStack m => MonadCallStack (AspectT m)
+
 -- | Class of environments that carry a 'SyntheticCallStack' value that can be
 -- modified.
 class HasSyntheticCallStack e where
@@ -217,7 +236,7 @@ instance HasSyntheticCallStack SyntheticCallStack where
 -- Caught exceptions are rethrown wrapped in 'SyntheticStackTraceException's,
 -- with the current 'SyntheticCallStack' added.
 keepCallStack ::
-  (MonadUnliftIO m, MonadReader runenv m, HasSyntheticCallStack runenv, Exception e) =>
+  (MonadUnliftIO m, MonadCallStack m, Exception e) =>
   -- | A selector for the kinds of exceptions we want to catch.
   -- For example @fromException \@IOError@.
   (SomeException -> Maybe e) ->
@@ -227,15 +246,17 @@ keepCallStack ::
   NonEmpty (T.TypeRep, MethodName) ->
   Advice ca m r
 keepCallStack selector method = makeExecutionAdvice \action -> do
-  currentStack <- asks (view callStack)
+  currentStack <- askCallStack
   withRunInIO \unlift -> do
-    er <- tryJust selector (unlift (local (over callStack (method :)) action))
+    er <- tryJust selector (unlift (addStackFrame method action))
     case er of
       Left e -> throwIO (SyntheticStackTraceException (toException e) (method :| currentStack))
       Right r -> pure r
-  where
-  view l = getConstant . l Constant
-  over l f = runIdentity . l (Identity . f)
 
 
+view :: ((a1 -> Constant a1 b1) -> a2 -> Constant c b2) -> a2 -> c
+view l = getConstant . l Constant
+
+over :: ((a1 -> Identity a2) -> a3 -> Identity c) -> (a1 -> a2) -> a3 -> c
+over l f = runIdentity . l (Identity . f)
 
