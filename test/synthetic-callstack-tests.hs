@@ -337,6 +337,13 @@ env' =
                 A.fromSimple_ (keepCallStack ioEx method)
     }
 
+
+-- THE COMPOSITION ROOT - YET ANOTER ALTERNATIVE APPROACH
+--
+--
+
+
+
 -- TESTS
 --
 --

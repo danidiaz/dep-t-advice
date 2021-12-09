@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TypeApplications #-}
@@ -52,6 +53,7 @@ import Data.SOP
 import Data.SOP (hctraverse_)
 import Data.SOP.NP
 import Data.Type.Equality
+import Data.Coerce
 import System.IO
 import Control.Concurrent
 import Control.Monad.IO.Unlift
@@ -62,6 +64,7 @@ import qualified Data.Typeable as T
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty
 import Control.Monad.Dep (DepT)
+import Data.Functor.Const
 
 -- $setup
 --
@@ -225,6 +228,10 @@ class HasSyntheticCallStack e where
 -- of a 'Control.Monad.Reader.ReaderT'.
 instance HasSyntheticCallStack SyntheticCallStack where
     callStack = id
+
+instance HasSyntheticCallStack s => HasSyntheticCallStack (Const s x) where
+    callStack f = fmap Const . callStack f . getConst
+
 
 -- | If the environment carries a 'SyntheticCallStack', make advised functions add
 -- themselves to the 'SyntheticCallStack' before they start executing.
