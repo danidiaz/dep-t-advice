@@ -88,6 +88,7 @@ import Lens.Micro (Lens', lens)
 import System.IO
 import Test.Tasty
 import Test.Tasty.HUnit
+import Data.Functor.Const
 import Prelude hiding (insert, lookup)
 
 -- THE BUSINESS LOGIC
@@ -338,11 +339,47 @@ env' =
     }
 
 
--- THE COMPOSITION ROOT - YET ANOTER ALTERNATIVE APPROACH
+-- THE COMPOSITION ROOT - YET ANOTER APPROACH
 --
+-- This approach also uses DepT, but not to carry the dependencies, only to carry 
+-- the call stack (like ReaderT in the first approach). 
 --
+-- This is done by parameterizing DepT with Const, which makes DepT
+-- behave almost as a regular ReaderT.
+-- 
+-- What are the benefits of unsing DepT instead of ReaderT here? Basically
+-- being able to use runFinalDepT in the test, which feels somewhat cleaner than
+-- runReaderT.
+type RT e m = DepT (Const e) m
 
-
+env'' :: Env (Phases (Env Identity (RT SyntheticCallStack IO))) (RT SyntheticCallStack IO)
+env'' = 
+  Env
+    { logger =
+        allocateBombs 1 `bindPhase` \bombs ->
+          constructor \_ ->
+            makeStdoutLogger
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+      logger2 =
+        allocateBombs 0 `bindPhase` \bombs ->
+           constructor \_ ->
+            tagged @"secondary" makeStdoutLogger
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+      repository =
+        allocateSet `bindPhase` \ref ->
+          constructor \env ->
+            makeInMemoryRepository ref env
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method),
+      controller =
+        skipPhase @Allocator $
+          constructor \env ->
+            makeController env
+              & A.adviseRecord @Top @Top \method ->
+                A.fromSimple_ (keepCallStack ioEx method)
+    }
 
 -- TESTS
 --
@@ -453,6 +490,46 @@ testSyntheticCallStackTagged' = do
       assertEqual "exception with callstack" expectedExceptionTagged (ex, trace)
     Right _ -> assertFailure "expected exception did not appear"
 
+
+
+testSyntheticCallStack'' :: Assertion
+testSyntheticCallStack'' = do
+  let action =
+        runContT (pullPhase @Allocator env'') \constructors -> do
+          -- here we complete the construction of the environment
+          let (asCall -> call) = fixEnv constructors
+          A.runFinalDepT (pure (Const [])) (call route) 1 2
+          pure ()
+  me <- try @SyntheticStackTraceException action
+  case me of
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedException (ex, trace)
+    Right _ -> assertFailure "expected exception did not appear"
+
+
+-- Test the "Constructor"-based version of the environment.
+testSyntheticCallStackTagged'' :: Assertion
+testSyntheticCallStackTagged'' = do
+  let envz = env'' {
+          controller =
+            skipPhase @Allocator $
+              constructor \env ->
+                makeController2Loggers env
+                  & A.adviseRecord @Top @Top \method ->
+                    A.fromSimple_ (keepCallStack ioEx method)
+        }
+      action =
+        runContT (pullPhase @Allocator envz) \constructors -> do
+          -- here we complete the construction of the environment
+          let (asCall -> call) = fixEnv constructors
+          A.runFinalDepT (pure (Const [])) (call route) 1 2
+          pure ()
+  me <- try @SyntheticStackTraceException action
+  case me of
+    Left (SyntheticStackTraceException (fromException @IOError -> Just ex) trace) ->
+      assertEqual "exception with callstack" expectedExceptionTagged (ex, trace)
+    Right _ -> assertFailure "expected exception did not appear"
+
 tests :: TestTree
 tests =
   testGroup
@@ -460,7 +537,9 @@ tests =
     [ testCase "synthetic call stack" testSyntheticCallStack,
       testCase "synthetic call stack with Tagged" testSyntheticCallStackTagged,
       testCase "synthetic call stack - DepT" testSyntheticCallStack',
-      testCase "synthetic call stack with Tagged - DepT" testSyntheticCallStackTagged'
+      testCase "synthetic call stack with Tagged - DepT" testSyntheticCallStackTagged',
+      testCase "synthetic call stack - constructor + DepT" testSyntheticCallStack'',
+      testCase "synthetic call stack with Tagged - constructor + DepT" testSyntheticCallStackTagged''
     ]
 
 main :: IO ()
