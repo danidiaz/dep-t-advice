@@ -39,6 +39,7 @@ module Dep.SimpleAdvice.Basic
     HasSyntheticCallStack (..),
     SyntheticStackTrace,
     SyntheticStackTraceException (..),
+    MonadCallStack (..),
     keepCallStack
   )
 where
@@ -203,7 +204,7 @@ data SyntheticStackTraceException
 
 instance Exception SyntheticStackTraceException
 
--- | Monads that carry a SyntheticCallStack.
+-- | Monads that carry a 'SyntheticCallStack'.
 class MonadCallStack m where
   askCallStack :: m SyntheticCallStack
   addStackFrame :: StackFrame -> m r -> m r
@@ -231,6 +232,9 @@ instance HasSyntheticCallStack SyntheticCallStack where
 
 instance HasSyntheticCallStack s => HasSyntheticCallStack (Const s x) where
     callStack f = fmap Const . callStack f . getConst
+
+instance HasSyntheticCallStack s => HasSyntheticCallStack (Constant s x) where
+    callStack f = fmap Constant . callStack f . getConstant
 
 
 -- | If the environment carries a 'SyntheticCallStack', make advised functions add
