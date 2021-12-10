@@ -4,6 +4,8 @@
 
 * Export `MonadCallStack` https://github.com/danidiaz/dep-t-advice/issues/23
 
+* Export converted versions of `Dep.SimpleAdvice.Basic` from `Dep.Advice.Basic`.
+
 ## 0.6.0.0 
 
 * SyntheticCallStackException renamed to SyntheticStackTraceException.
