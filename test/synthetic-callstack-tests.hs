@@ -46,6 +46,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Typeable
 import Dep.Advice qualified as A
+import Dep.Advice.Basic qualified as A
 import Dep.Env
   ( Autowireable,
     Autowired (..),
@@ -317,25 +318,25 @@ env' =
           Identity $ A.component \_ ->
             makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+                A.keepCallStack ioEx method <> A.injectFailures bombs,
       logger2 =
         allocateBombs 0 `bindPhase` \bombs ->
           Identity $ A.component \_ ->
             tagged @"secondary" makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+                A.keepCallStack ioEx method <> A.injectFailures bombs,
       repository =
         allocateSet `bindPhase` \ref ->
           Identity $ A.component \env ->
             makeInMemoryRepository ref env
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method),
+                A.keepCallStack ioEx method,
       controller =
         skipPhase @Allocator $
           Identity $ A.component \env ->
             makeController env
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method)
+                A.keepCallStack ioEx method
     }
 
 
@@ -360,25 +361,25 @@ env'' =
           constructor \_ ->
             makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+                A.keepCallStack ioEx method <> A.injectFailures bombs,
       logger2 =
         allocateBombs 0 `bindPhase` \bombs ->
            constructor \_ ->
             tagged @"secondary" makeStdoutLogger
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method <> injectFailures bombs),
+                A.keepCallStack ioEx method <> A.injectFailures bombs,
       repository =
         allocateSet `bindPhase` \ref ->
           constructor \env ->
             makeInMemoryRepository ref env
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method),
+                A.keepCallStack ioEx method,
       controller =
         skipPhase @Allocator $
           constructor \env ->
             makeController env
               & A.adviseRecord @Top @Top \method ->
-                A.fromSimple_ (keepCallStack ioEx method)
+                A.keepCallStack ioEx method
     }
 
 -- TESTS
@@ -478,7 +479,7 @@ testSyntheticCallStackTagged' = do
               Identity $ A.component \env ->
                 makeController2Loggers env
                   & A.adviseRecord @Top @Top \method ->
-                    A.fromSimple_ (keepCallStack ioEx method)
+                    A.keepCallStack ioEx method
         }
       action =
         runContT (pullPhase @Allocator envz) \runnable -> do
@@ -516,7 +517,7 @@ testSyntheticCallStackTagged'' = do
               constructor \env ->
                 makeController2Loggers env
                   & A.adviseRecord @Top @Top \method ->
-                    A.fromSimple_ (keepCallStack ioEx method)
+                    A.keepCallStack ioEx method
         }
       action =
         runContT (pullPhase @Allocator envz) \constructors -> do

@@ -19,7 +19,7 @@
 module Main (main) where
 
 import Dep.Advice
-import Dep.Advice.Basic
+import qualified Dep.Advice.Basic as A
 import Dep.SimpleAdvice.Basic
 import Control.Monad.Dep
 import Control.Monad.Reader
@@ -227,7 +227,7 @@ expectedAdviced = (["advice before: 7", "I'm going to insert in the db!", "I'm g
 weirdAdvicedEnv :: Env (DepT Env (Writer TestTrace))
 weirdAdvicedEnv =
    env {
-         _controller = advise (doLogging <> fromSimple \_ -> returnMempty) (_controller env), --,
+         _controller = advise (doLogging <> A.returnMempty) (_controller env), --,
          -- This advice below doesn't really do anything, I'm just experimenting with passing the constraints with type application
          _logger = advise @(Show `And` Eq) (makeAdvice (\args -> pure (id, args))) (_logger env)
        }
@@ -262,7 +262,7 @@ returnMempty'' :: forall ca e m r. (Monad m, Monoid r, Show r, Read r) => Advice
 returnMempty'' = fromSimple (\_ -> returnMempty) <> justAResultConstraint
 
 printArgs' :: Advice (Eq `And` Ord `And` Show) e_ IO ()
-printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
+printArgs' = restrictArgs @(Eq `And` Ord `And` Show) (\Dict -> Dict) (A.printArgs stdout "foo")
  
 -- does EnvConstraint compile?
 
