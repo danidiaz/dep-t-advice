@@ -344,13 +344,13 @@ env' =
 -- This approach also uses DepT, but not to carry the dependencies, only to carry 
 -- the call stack (like ReaderT in the first approach). 
 --
--- This is done by parameterizing DepT with Const, which makes DepT
+-- This is done by parameterizing DepT with Constant, which makes DepT
 -- behave almost as a regular ReaderT.
 -- 
--- What are the benefits of unsing DepT instead of ReaderT here? Basically
+-- What are the benefits of unsing DepT instead of ReaderT here? Well, basically
 -- being able to use runFinalDepT in the test, which feels somewhat cleaner than
 -- runReaderT.
-type RT e m = DepT (Const e) m
+type RT e m = DepT (Constant e) m
 
 env'' :: Env (Phases (Env Identity (RT SyntheticCallStack IO))) (RT SyntheticCallStack IO)
 env'' = 
@@ -498,7 +498,7 @@ testSyntheticCallStack'' = do
         runContT (pullPhase @Allocator env'') \constructors -> do
           -- here we complete the construction of the environment
           let (asCall -> call) = fixEnv constructors
-          A.runFinalDepT (pure (Const [])) (call route) 1 2
+          A.runFinalDepT (pure (Constant [])) (call route) 1 2
           pure ()
   me <- try @SyntheticStackTraceException action
   case me of
@@ -522,7 +522,7 @@ testSyntheticCallStackTagged'' = do
         runContT (pullPhase @Allocator envz) \constructors -> do
           -- here we complete the construction of the environment
           let (asCall -> call) = fixEnv constructors
-          A.runFinalDepT (pure (Const [])) (call route) 1 2
+          A.runFinalDepT (pure (Constant [])) (call route) 1 2
           pure ()
   me <- try @SyntheticStackTraceException action
   case me of
