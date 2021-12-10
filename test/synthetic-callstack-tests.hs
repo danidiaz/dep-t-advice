@@ -47,6 +47,7 @@ import Data.Set qualified as Set
 import Data.Typeable
 import Dep.Advice qualified as A
 import Dep.Advice.Basic qualified as A
+import Dep.Has
 import Dep.Env
   ( Autowireable,
     Autowired (..),
@@ -160,9 +161,9 @@ makeController (asCall -> call) =
         call lookup toLookup
     }
 
+type MakeController2LoggersDeps = '[Logger, Tagged "secondary" Logger, Repository]
 makeController2Loggers :: 
-  (Has Logger m env, 
-  Has (Tagged "secondary" Logger) m env, Has Repository m env, Monad m) =>
+  (HasAll MakeController2LoggersDeps m env, Monad m) =>
   env ->
   Controller m
 makeController2Loggers (asCall -> call) =
