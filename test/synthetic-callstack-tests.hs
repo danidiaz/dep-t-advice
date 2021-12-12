@@ -22,7 +22,7 @@
 
 -- | An example of how an application can make use of the "dep-t" and
 -- "dep-t-advice" packages for keeping a "synthetic" call stack that tracks the
--- invocations of monadic functions—though only of those which take part in dependency
+-- invocations of monadic functions-though only of those which take part in dependency
 -- injection.
 --
 -- We are assuming that the application follows a "record-of-functions" style.
@@ -306,7 +306,7 @@ instance HasSyntheticCallStack (CallEnv SyntheticCallStack e_ m) where
 
 -- Here use the DepT monad (a variant of ReaderT) as the base monad.
 --
--- The environment of DepT includes—just as before—the SyntheticCallStack value
+-- The environment of DepT includes-just as before-the SyntheticCallStack value
 -- that is used to trace each sub-call.
 --
 -- But now it also includes the dependency injection context with all the
