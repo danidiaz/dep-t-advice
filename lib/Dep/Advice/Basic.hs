@@ -137,7 +137,7 @@ returnMempty = fromSimple_ SA.returnMempty
 -- | Given a 'Handle' and a prefix string, makes functions print their
 -- arguments to the 'Handle'.
 --
-printArgs :: forall e_ m r. MonadIO m => Handle -> String -> Advice Show e_ m r
+printArgs :: forall e_ m r. (Monad m, MonadIO (DepT e_ m)) => Handle -> String -> Advice Show e_ m r
 printArgs h prefix = fromSimple_ (SA.printArgs h prefix)
 
 -- | 
@@ -161,7 +161,7 @@ doCachingBadly cacheLookup cachePut = fromSimple_ (SA.doCachingBadly cacheLookup
 --
 -- A better implementation of this advice would likely use the \"async\"
 -- package instead of bare `forkIO`. 
-doAsyncBadly :: forall ca e_ m . MonadUnliftIO m => Advice ca e_ m ()
+doAsyncBadly :: forall ca e_ m . (Monad m, MonadUnliftIO (DepT e_ m)) => Advice ca e_ m ()
 doAsyncBadly = fromSimple_ SA.doAsyncBadly
 
 -- | Given a reference with two infinite lists of 'IO' actions, on each
@@ -170,7 +170,7 @@ doAsyncBadly = fromSimple_ SA.doAsyncBadly
 -- after.
 --
 -- A common use for this would be to pass exception-throwing actions.
-injectFailures :: forall ca e_ m r . (MonadIO m, MonadFail m) => IORef ([IO ()], [IO ()]) -> Advice ca e_ m r
+injectFailures :: forall ca e_ m r . (Monad m, MonadIO (DepT e_ m), MonadFail (DepT e_ m)) => IORef ([IO ()], [IO ()]) -> Advice ca e_ m r
 injectFailures ref = fromSimple_ (SA.injectFailures ref)
 
 -- | If the environment carries a 'SyntheticCallStack', make advised functions add
@@ -183,7 +183,7 @@ injectFailures ref = fromSimple_ (SA.injectFailures ref)
 -- Caught exceptions are rethrown wrapped in 'SyntheticStackTraceException's,
 -- with the current 'SyntheticCallStack' added.
 keepCallStack ::
-  (MonadUnliftIO m, SA.MonadCallStack (DepT e_ m), Exception e) =>
+  (Monad m, MonadUnliftIO (DepT e_ m), SA.MonadCallStack (DepT e_ m), Exception e) =>
   -- | A selector for the kinds of exceptions we want to catch.
   -- For example @fromException \@IOError@.
   (SomeException -> Maybe e) ->
