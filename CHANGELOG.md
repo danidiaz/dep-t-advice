@@ -1,5 +1,7 @@
 # Revision history for dep-t-advice
 
+## 0.6.1.1 
+
 ## 0.6.1.0 
 
 * Export `MonadCallStack` https://github.com/danidiaz/dep-t-advice/issues/23
