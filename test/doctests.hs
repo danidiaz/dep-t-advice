@@ -9,4 +9,6 @@ main =
     , "lib/Dep/Advice/Basic.hs"
     , "lib/Dep/SimpleAdvice.hs"
     , "lib/Dep/SimpleAdvice/Basic.hs"
+    , "lib/Dep/ReaderAdvice.hs"
+    , "lib/Dep/ReaderAdvice/Basic.hs"
     ]

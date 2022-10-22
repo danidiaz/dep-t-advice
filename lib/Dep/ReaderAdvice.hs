@@ -23,46 +23,46 @@
 --    This module provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
---    'Advice's are type-preserving transformations on 'DepT'-effectful functions of
+--    'Advice's are type-preserving transformations on 'ReaderT'-effectful functions of
 --    any number of arguments.
 --
 -- >>> :{
---    foo0 :: DepT NilEnv IO (Sum Int)
+--    foo0 :: ReaderT () IO (Sum Int)
 --    foo0 = pure (Sum 5)
---    foo1 :: Bool -> DepT NilEnv IO (Sum Int)
+--    foo1 :: Bool -> ReaderT () IO (Sum Int)
 --    foo1 _ = foo0
---    foo2 :: Char -> Bool -> DepT NilEnv IO (Sum Int)
+--    foo2 :: Char -> Bool -> ReaderT () IO (Sum Int)
 --    foo2 _ = foo1
 -- :}
 --
--- They work for @DepT@-actions of zero arguments:
+-- They work for @ReaderT@-actions of zero arguments:
 --
--- >>> advise (fromSimple \_ -> printArgs stdout "foo0") foo0 `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo0") foo0 `runReaderT` ()
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- And for functions of one or more arguments, provided they end on a @DepT@-action:
+-- And for functions of one or more arguments, provided they end on a @ReaderT@-action:
 --
--- >>> advise (fromSimple \_ -> printArgs stdout "foo1") foo1 False `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo1") foo1 False `runReaderT` ()
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> advise (fromSimple \_ -> printArgs stdout "foo2") foo2 'd' False `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo2") foo2 'd' False `runReaderT` ()
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> advise (fromSimple \_ -> returnMempty @Top) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (returnMempty @Top) foo2 'd' False `runReaderT` ()
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being
 -- applied:
 --
--- >>> advise (fromSimple \_ -> printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runDepT` NilEnv
+-- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runReaderT` ()
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
@@ -137,6 +137,7 @@ import Data.Bifunctor (first)
 -- >>> import Dep.ReaderAdvice
 -- >>> import Dep.ReaderAdvice.Basic (printArgs,returnMempty)
 -- >>> import Control.Monad
+-- >>> import Control.Monad.Reader
 -- >>> import Control.Monad.Writer
 -- >>> import Data.Kind
 -- >>> import Data.SOP
@@ -144,10 +145,12 @@ import Data.Bifunctor (first)
 -- >>> import Data.Monoid
 -- >>> import System.IO
 -- >>> import Data.IORef
+-- >>> import Data.Function ((&))
 -- >>> import GHC.Generics (Generic)
 -- >>> import GHC.Generics qualified
 
--- | A generic transformation of 'DepT'-effectful functions with environment
+
+-- | A generic transformation of 'ReaderT'-effectful functions with environment
 -- @e_@, base monad @m@ and return type @r@,
 -- provided the functions satisfy certain constraint @ca@
 -- on all of their arguments.
@@ -266,19 +269,19 @@ data Pair a b = Pair !a !b
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
---  foo :: Int -> DepT NilEnv IO String
+--  foo :: Int -> ReaderT () IO String
 --  foo _ = pure "foo"
---  advisedFoo = advise (fromSimple \_ -> printArgs stdout "Foo args: ") foo
+--  advisedFoo = advise (printArgs stdout "Foo args: ") foo
 -- :}
 --
 -- __/TYPE APPLICATION REQUIRED!/__ If the @ca@ constraint of the 'Advice' remains polymorphic,
 -- it must be supplied by means of a type application:
 --
 -- >>> :{
---  bar :: Int -> DepT NilEnv IO String
+--  bar :: Int -> ReaderT () IO String
 --  bar _ = pure "bar"
---  advisedBar1 = advise (fromSimple \_ -> returnMempty @Top) bar
---  advisedBar2 = advise @Top (fromSimple \_ -> returnMempty) bar
+--  advisedBar1 = advise (returnMempty @Top) bar
+--  advisedBar2 = advise @Top returnMempty bar
 -- :}
 advise ::
   forall ca e m r as advisee.
@@ -338,12 +341,12 @@ instance (Functor m, Multicurryable as e m r curried) => Multicurryable (a ': as
 --
 -- >>> :{
 --  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
---  stricterPrintArgs = restrictArgs (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
+--  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --
 --    or with a type application to 'restrictArgs':
 --
--- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (fromSimple \_ -> printArgs stdout "foo")
+-- >>> stricterPrintArgs = restrictArgs @(Show `And` Eq `And` Ord) (\Dict -> Dict) (printArgs stdout "foo")
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
@@ -389,7 +392,6 @@ class AdvisedProduct ca e m cr advised_ where
 
 instance
   ( G.Generic (advised (ReaderT e m)),
-    -- G.Rep (advised (DepT e m)) ~ G.D1 ('G.MetaData name mod p nt) (G.C1 y advised_),
     G.Rep (advised (ReaderT e m)) ~ G.D1 x (G.C1 y advised_),
     Typeable advised,
     AdvisedProduct ca e m cr advised_
@@ -502,18 +504,15 @@ adviseRecord = _adviseRecord @ca @e @m @cr []
 --       repository :: Repository m,
 --       controller :: Controller m
 --     }
---   newtype Wraps x = Wraps x
---   env :: Env (DepT Env (Writer ()))
+--   env :: Env (ReaderT () IO)
 --   env =
 --     let logger = Logger \_ -> pure ()
 --         repository =
---           adviseRecord @Top @Top mempty $
---           deceiveRecord Wraps $
---           Repository {select = \_ -> pure [], insert = \_ -> pure ()}
+--           Repository {select = \_ -> pure [], insert = \_ -> pure ()} &
+--           adviseRecord @Top @Top mempty 
 --         controller =
---           adviseRecord @Top @Top mempty $
---           deceiveRecord Wraps $
---           Controller \_ -> pure "view"
+--           Controller { serve = \_ -> pure "view" } &
+--           adviseRecord @Top @Top mempty 
 --      in Env {logger, repository, controller}
 -- :}
 
