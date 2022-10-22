@@ -1,6 +1,8 @@
 # Revision history for dep-t-advice
 
-## 0.6.1.1 
+## 0.6.2.0
+
+* Add `Dep.ReaderAdvice` and `Dep.IOAdvice`.
 
 ## 0.6.1.0 
 

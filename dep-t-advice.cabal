@@ -1,7 +1,7 @@
 cabal-version:       3.0
 
 name:                dep-t-advice
-version:             0.6.1.1
+version:             0.6.2.0
 synopsis:            Giving good advice to functions in records-of-functions.
 description:         
                      Companion to the dep-t package. Easily add behaviour to
@@ -58,6 +58,8 @@ library
                        Dep.Advice.Basic
                        Dep.SimpleAdvice
                        Dep.SimpleAdvice.Basic
+                       Dep.ReaderAdvice
+                       Dep.ReaderAdvice.Basic
   other-modules:       Dep.SimpleAdvice.Internal    
                         
   hs-source-dirs:      lib 
