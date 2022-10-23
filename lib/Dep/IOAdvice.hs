@@ -18,6 +18,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE UndecidableSuperClasses #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE InstanceSigs #-}
 
 -- |
 --    This module provides the 'Advice' datatype, along for functions for creating,
@@ -27,49 +28,49 @@
 --    any number of arguments.
 --
 -- >>> :{
---    foo0 :: ReaderT () IO (Sum Int)
+--    foo0 :: IO (Sum Int)
 --    foo0 = pure (Sum 5)
---    foo1 :: Bool -> ReaderT () IO (Sum Int)
+--    foo1 :: Bool -> IO (Sum Int)
 --    foo1 _ = foo0
---    foo2 :: Char -> Bool -> ReaderT () IO (Sum Int)
+--    foo2 :: Char -> Bool -> IO (Sum Int)
 --    foo2 _ = foo1
 -- :}
 --
 -- They work for @ReaderT@-actions of zero arguments:
 --
--- >>> advise (printArgs stdout "foo0") foo0 `runReaderT` ()
+-- >>> advise (printArgs stdout "foo0") foo0 
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- And for functions of one or more arguments, provided they end on a @ReaderT@-action:
 --
--- >>> advise (printArgs stdout "foo1") foo1 False `runReaderT` ()
+-- >>> advise (printArgs stdout "foo1") foo1 False
 -- foo1: False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- >>> advise (printArgs stdout "foo2") foo2 'd' False `runReaderT` ()
+-- >>> advise (printArgs stdout "foo2") foo2 'd' False
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
 -- 'Advice's can also tweak the result value of functions:
 --
--- >>> advise (returnMempty @Top) foo2 'd' False `runReaderT` ()
+-- >>> advise (returnMempty @Top) foo2 'd' False
 -- Sum {getSum = 0}
 --
 -- And they can be combined using @Advice@'s 'Monoid' instance before being
 -- applied:
 --
--- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False `runReaderT` ()
+-- >>> advise (printArgs stdout "foo2" <> returnMempty) foo2 'd' False
 -- foo2: 'd' False
 -- <BLANKLINE>
 -- Sum {getSum = 0}
 --
 -- Although sometimes composition might require harmonizing the constraints
 -- each 'Advice' places on the arguments, if they differ.
-module Dep.ReaderAdvice
+module Dep.IOAdvice
   ( -- * The Advice type
     Advice,
 
@@ -88,7 +89,8 @@ module Dep.ReaderAdvice
     -- * Advising and deceiving entire records
     -- $records
     adviseRecord,
-
+    multicurry,
+    multiuncurry,
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -103,7 +105,6 @@ where
 
 import Dep.Has
 import Dep.Env
-import Control.Monad.Trans.Reader (ReaderT (..), withReaderT)
 import Data.Functor.Identity
 import Data.Kind
 import Data.List.NonEmpty qualified as N
@@ -134,8 +135,8 @@ import Data.Bifunctor (first)
 -- >>> :set -XScopedTypeVariables
 -- >>> :set -XDeriveGeneric
 -- >>> :set -XImportQualifiedPost
--- >>> import Dep.ReaderAdvice
--- >>> import Dep.ReaderAdvice.Basic (printArgs,returnMempty)
+-- >>> import Dep.IOAdvice
+-- >>> import Dep.IOAdvice.Basic (printArgs,returnMempty)
 -- >>> import Control.Monad
 -- >>> import Control.Monad.Reader
 -- >>> import Control.Monad.Writer
@@ -168,18 +169,16 @@ import Data.Bifunctor (first)
 type Advice ::
   (Type -> Constraint) ->
   Type ->
-  (Type -> Type) ->
-  Type ->
   Type
-data Advice (ca :: Type -> Constraint) e m r where
+data Advice (ca :: Type -> Constraint) r where
   Advice ::
-    forall ca e m r.
+    forall ca r.
     ( forall as.
       All ca as =>
       NP I as ->
-      ReaderT e m (ReaderT e m r -> ReaderT e m r, NP I as)
+      IO (IO r -> IO r, NP I as)
     ) ->
-    Advice ca e m r
+    Advice ca r
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
@@ -187,13 +186,13 @@ data Advice (ca :: Type -> Constraint) e m r where
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
-instance Monad m => Semigroup (Advice ca e m r) where
+instance Semigroup (Advice ca r) where
   Advice outer <> Advice inner = Advice \args -> do
     (tweakOuter, argsOuter) <- outer args
     (tweakInner, argsInner) <- inner argsOuter
     pure (tweakOuter . tweakInner, argsInner)
 
-instance Monad m => Monoid (Advice ca e m r) where
+instance Monoid (Advice ca r) where
   mappend = (<>)
   mempty = Advice \args -> pure (id, args)
 
@@ -208,39 +207,38 @@ instance Monad m => Monoid (Advice ca e m r) where
 --    advised function.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca r. Advice ca r
 --  doesNothing = makeAdvice (\args -> pure (id,  args)) 
 -- :}
 --
 --
 makeAdvice ::
-  forall ca e m r.
+  forall ca r.
   -- | The function that tweaks the arguments and the execution.
   ( forall as.
     All ca as =>
     NP I as ->
-    ReaderT e m (ReaderT e m r -> ReaderT e m r, NP I as)
+    IO (IO r -> IO r, NP I as)
   ) ->
-  Advice ca e m r
+  Advice ca r
 makeAdvice = Advice
 
 -- |
 --    Create an advice which only tweaks and/or analyzes the function arguments.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca r. Advice ca r
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
-  forall ca e m r.
-  Monad m =>
+  forall ca r.
   -- | The function that tweaks the arguments.
   ( forall as.
     All ca as =>
     NP I as ->
-    ReaderT e m (NP I as)
+    IO (NP I as)
   ) ->
-  Advice ca e m r
+  Advice ca r
 makeArgsAdvice tweakArgs =
   makeAdvice $ \args -> do
     args' <- tweakArgs args
@@ -250,17 +248,16 @@ makeArgsAdvice tweakArgs =
 --    Create an advice which only tweaks the execution of the final monadic action.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca r. Advice ca r
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
-  forall ca e m r.
-  Applicative m =>
+  forall ca r.
   -- | The function that tweaks the execution.
-  ( ReaderT e m r ->
-    ReaderT e m r
+  ( IO r ->
+    IO r
   ) ->
-  Advice ca e m r
+  Advice ca r
 makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, args)
 
 data Pair a b = Pair !a !b
@@ -269,7 +266,7 @@ data Pair a b = Pair !a !b
 -- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
---  foo :: Int -> ReaderT () IO String
+--  foo :: Int -> IO String
 --  foo _ = pure "foo"
 --  advisedFoo = advise (printArgs stdout "Foo args: ") foo
 -- :}
@@ -278,44 +275,43 @@ data Pair a b = Pair !a !b
 -- it must be supplied by means of a type application:
 --
 -- >>> :{
---  bar :: Int -> ReaderT () IO String
+--  bar :: Int -> IO String
 --  bar _ = pure "bar"
 --  advisedBar1 = advise (returnMempty @Top) bar
 --  advisedBar2 = advise @Top returnMempty bar
 -- :}
 advise ::
-  forall ca e m r as advisee.
-  (Multicurryable as e m r advisee, All ca as, Monad m) =>
+  forall ca r as advisee.
+  (Multicurryable as r advisee, All ca as) =>
   -- | The advice to apply.
-  Advice ca e m r ->
+  Advice ca r ->
   -- | A function to be adviced.
   advisee ->
   advisee
-advise (Advice f) advisee = do
-  let uncurried = multiuncurry @as @e @m @r advisee
+advise (Advice f) advisee =
+  let uncurried = multiuncurry @as @r advisee
       uncurried' args = do
         (tweakExecution, args') <- f args
         tweakExecution (uncurried args')
-   in multicurry @as @e @m @r uncurried'
+   in multicurry @as @r uncurried'
 
 type Multicurryable ::
   [Type] ->
   Type ->
-  (Type -> Type) ->
-  Type ->
   Type ->
   Constraint
-class Multicurryable as e m r curried | curried -> as e m r where
-  multiuncurry :: curried -> NP I as -> ReaderT e m r
-  multicurry :: (NP I as -> ReaderT e m r) -> curried
+class Multicurryable as r curried | curried -> as r where
+  multiuncurry :: curried -> NP I as -> IO r
+  multicurry :: (NP I as -> IO r) -> curried
 
-instance Monad m => Multicurryable '[] e m r (ReaderT e m r) where
+instance Multicurryable '[] r (IO r) where
+  multiuncurry :: IO r -> NP I '[] -> IO r
   multiuncurry action Nil = action
   multicurry f = f Nil
 
-instance (Functor m, Multicurryable as e m r curried) => Multicurryable (a ': as) e m r (a -> curried) where
-  multiuncurry f (I a :* as) = multiuncurry @as @e @m @r @curried (f a) as
-  multicurry f a = multicurry @as @e @m @r @curried (f . (:*) (I a))
+instance (Multicurryable as r curried) => Multicurryable (a ': as) r (a -> curried) where
+  multiuncurry f (I a :* as) = multiuncurry @as @r @curried (f a) as
+  multicurry f a = multicurry @as @r @curried (f . (:*) (I a))
 
 -- $restrict
 --
@@ -337,7 +333,7 @@ instance (Functor m, Multicurryable as e m r curried) => Multicurryable (a ': as
 --    enough type information to the GADT, be it as an explicit signature:
 --
 -- >>> :{
---  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
+--  stricterPrintArgs :: forall r. Advice (Show `And` Eq `And` Ord) r
 --  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --
@@ -347,13 +343,13 @@ instance (Functor m, Multicurryable as e m r curried) => Multicurryable (a ': as
 
 -- | Makes the constraint on the arguments more restrictive.
 restrictArgs ::
-  forall more less e m r.
+  forall more less r.
   -- | Evidence that one constraint implies the other. Every @x@ that has a @more@ instance also has a @less@ instance.
   (forall x. Dict more x -> Dict less x) ->
   -- | Advice with less restrictive constraint on the args.
-  Advice less e m r ->
+  Advice less r ->
   -- | Advice with more restrictive constraint on the args.
-  Advice more e m r
+  Advice more r
 -- about the order of the type parameters... which is more useful?
 -- A possible principle to follow:
 -- We are likely to know the "less" constraint, because advices are likely to
@@ -363,7 +359,7 @@ restrictArgs ::
 -- on the fly, while constructing a record, without a top-level binding with a
 -- type signature.  This seems to favor putting "more" first.
 restrictArgs evidence (Advice advice) = Advice \args ->
-    let advice' :: forall as. All more as => NP I as -> ReaderT e m (ReaderT e m r -> ReaderT e m r, NP I as)
+    let advice' :: forall as. All more as => NP I as -> IO (IO r -> IO r, NP I as)
         advice' args' =
             case Data.SOP.Dict.mapAll @more @less evidence of
                f -> case f (Dict @(All more) @as) of
@@ -379,80 +375,80 @@ data RecordComponent
 -- advising *all* fields of a record
 --
 --
-type AdvisedRecord :: (Type -> Constraint) -> Type -> (Type -> Type) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
-class AdvisedRecord ca e m cr advised where
-  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e m r) -> advised (ReaderT e m) -> advised (ReaderT e m)
+type AdvisedRecord :: (Type -> Constraint) -> (Type -> Constraint) -> ((Type -> Type) -> Type) -> Constraint
+class AdvisedRecord ca cr advised where
+  _adviseRecord :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca r) -> advised IO -> advised IO
 
-type AdvisedProduct :: (Type -> Constraint) -> Type -> (Type -> Type) -> (Type -> Constraint) -> (k -> Type) -> Constraint
-class AdvisedProduct ca e m cr advised_ where
-  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e m r) -> advised_ k -> advised_ k
+type AdvisedProduct :: (Type -> Constraint) -> (Type -> Constraint) -> (k -> Type) -> Constraint
+class AdvisedProduct ca cr advised_ where
+  _adviseProduct :: TypeRep -> [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca r) -> advised_ k -> advised_ k
 
 instance
-  ( G.Generic (advised (ReaderT e m)),
-    G.Rep (advised (ReaderT e m)) ~ G.D1 x (G.C1 y advised_),
+  ( G.Generic (advised IO),
+    G.Rep (advised IO) ~ G.D1 x (G.C1 y advised_),
     Typeable advised,
-    AdvisedProduct ca e m cr advised_
+    AdvisedProduct ca cr advised_
   ) =>
-  AdvisedRecord ca e m cr advised
+  AdvisedRecord ca cr advised
   where
   _adviseRecord acc f unadvised =
     let G.M1 (G.M1 unadvised_) = G.from unadvised
-        advised_ = _adviseProduct @_ @ca @e @m @cr (typeRep (Proxy @advised)) acc f unadvised_
+        advised_ = _adviseProduct @_ @ca @cr (typeRep (Proxy @advised)) acc f unadvised_
      in G.to (G.M1 (G.M1 advised_))
 
 instance
-  ( AdvisedProduct ca e m cr advised_left,
-    AdvisedProduct ca e m cr advised_right
+  ( AdvisedProduct ca cr advised_left,
+    AdvisedProduct ca cr advised_right
   ) =>
-  AdvisedProduct ca e m cr (advised_left G.:*: advised_right)
+  AdvisedProduct ca cr (advised_left G.:*: advised_right)
   where
-  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @e @m @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @e @m @cr tr acc f unadvised_right
+  _adviseProduct tr acc f (unadvised_left G.:*: unadvised_right) = _adviseProduct @_ @ca @cr tr acc f unadvised_left G.:*: _adviseProduct @_ @ca @cr tr acc f unadvised_right
 
 type DiscriminateAdvisedComponent :: Type -> RecordComponent
 type family DiscriminateAdvisedComponent c where
   DiscriminateAdvisedComponent (_ -> _) = 'Terminal
-  DiscriminateAdvisedComponent (ReaderT _ _ _) = 'Terminal
+  DiscriminateAdvisedComponent (IO _) = 'Terminal
   DiscriminateAdvisedComponent (Identity _) = 'IWrapped
   DiscriminateAdvisedComponent (I _) = 'IWrapped
   DiscriminateAdvisedComponent _ = 'Recurse
 
-type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> Type -> (Type -> Type) -> (Type -> Constraint) -> Type -> Constraint
-class AdvisedComponent component_type ca e m cr advised where
-  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca e m r) -> advised -> advised
+type AdvisedComponent :: RecordComponent -> (Type -> Constraint) -> (Type -> Constraint) -> Type -> Constraint
+class AdvisedComponent component_type ca cr advised where
+  _adviseComponent :: [(TypeRep, String)] -> (forall r. cr r => NonEmpty (TypeRep, String) -> Advice ca r) -> advised -> advised
 
 instance
-  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca e m cr advised,
+  ( AdvisedComponent (DiscriminateAdvisedComponent advised) ca cr advised,
     KnownSymbol fieldName
   ) =>
-  AdvisedProduct ca e m cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
+  AdvisedProduct ca cr (G.S1 ( 'G.MetaSel ( 'Just fieldName) su ss ds) (G.Rec0 advised))
   where
   _adviseProduct tr acc f (G.M1 (G.K1 advised)) =
     let acc' = (tr, symbolVal (Proxy @fieldName)) : acc
-     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e @m @cr acc' f advised))
+     in G.M1 (G.K1 (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @cr acc' f advised))
 
 instance
-  (Multicurryable as e m r advised, All ca as, cr r, Monad m) =>
-  AdvisedComponent 'Terminal ca e m cr advised
+  (Multicurryable as r advised, All ca as, cr r) =>
+  AdvisedComponent 'Terminal ca cr advised
   where
-  _adviseComponent acc f advised = advise @ca @e @m (f (N.fromList acc)) advised
+  _adviseComponent acc f advised = advise @ca (f (N.fromList acc)) advised
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e m cr advised =>
-  AdvisedComponent 'IWrapped ca e m cr (Identity advised)
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca cr advised =>
+  AdvisedComponent 'IWrapped ca cr (Identity advised)
   where
-  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e @m @cr acc f advised)
+  _adviseComponent acc f (Identity advised) = Identity (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @cr acc f advised)
 
 instance
-  AdvisedComponent (DiscriminateAdvisedComponent advised) ca e m cr advised =>
-  AdvisedComponent 'IWrapped ca e m cr (I advised)
+  AdvisedComponent (DiscriminateAdvisedComponent advised) ca cr advised =>
+  AdvisedComponent 'IWrapped ca cr (I advised)
   where
-  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @e @m @cr acc f advised)
+  _adviseComponent acc f (I advised) = I (_adviseComponent @(DiscriminateAdvisedComponent advised) @ca @cr acc f advised)
 
 instance
-  AdvisedRecord ca e m cr advisable =>
-  AdvisedComponent 'Recurse ca e m cr (advisable (ReaderT e m))
+  AdvisedRecord ca cr advisable =>
+  AdvisedComponent 'Recurse ca cr (advisable IO)
   where
-  _adviseComponent acc f advised = _adviseRecord @ca @e @m @cr acc f advised
+  _adviseComponent acc f advised = _adviseRecord @ca @cr acc f advised
 
 
 -- | Gives 'Advice' to all the functions in a record-of-functions.
@@ -467,15 +463,15 @@ instance
 -- and the @cr@ constraint on the result type must be supplied by means of a
 -- type application. Supply 'Top' if no constraint is required.
 adviseRecord ::
-  forall ca cr e m advised.
-  AdvisedRecord ca e m cr advised =>
+  forall ca cr advised.
+  AdvisedRecord ca cr advised =>
   -- | The advice to apply.
-  (forall r . cr r => NonEmpty (TypeRep, String) -> Advice ca e m r) ->
+  (forall r . cr r => NonEmpty (TypeRep, String) -> Advice ca r) ->
   -- | The record to advise recursively.
-  advised (ReaderT e m) ->
+  advised IO ->
   -- | The advised record.
-  advised (ReaderT e m)
-adviseRecord = _adviseRecord @ca @e @m @cr []
+  advised IO
+adviseRecord = _adviseRecord @ca @cr []
 
 -- $records
 --
@@ -501,7 +497,7 @@ adviseRecord = _adviseRecord @ca @e @m @cr []
 --       repository :: Repository m,
 --       controller :: Controller m
 --     }
---   env :: Env (ReaderT () IO)
+--   env :: Env IO
 --   env =
 --     let logger = Logger \_ -> pure ()
 --         repository =
