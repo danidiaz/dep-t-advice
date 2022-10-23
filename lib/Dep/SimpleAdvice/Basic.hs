@@ -249,7 +249,7 @@ instance HasSyntheticCallStack s => HasSyntheticCallStack (Constant s x) where
 keepCallStack ::
   (MonadUnliftIO m, MonadCallStack m, Exception e) =>
   -- | A selector for the kinds of exceptions we want to catch.
-  -- For example @fromException \@IOError@.
+  -- For example @ fromException \@IOError@.
   (SomeException -> Maybe e) ->
   -- | The path to the current component/method in the environment.
   -- It will be usually obtained through
