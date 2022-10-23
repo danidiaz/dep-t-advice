@@ -143,7 +143,7 @@ in the Haskell Discourse for more info.
 
 There's a catch, however. `Dep.SimpleAdvice` depends on the `coerce` mechanism
 of Haskell, and it can sometimes be finicky, for example when some required
-constructor hasn't been exported, or when there are polymorphic functions
+constructor hasn't been imported, or when there are polymorphic functions
 involved.
 
 That's the reason `Dep.ReaderAdvice` and `Dep.IOAdvice` are still necessary. For

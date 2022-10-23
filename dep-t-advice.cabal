@@ -11,9 +11,10 @@ description:
                      In other words: something like the "advices" of
                      aspect-oriented programming.
 
-                     Two flavors of advice are provided: one for environments
-                     parameterized by the DepT monad, and a simpler version for
-                     environments parameterized by IO and other monads.
+                     Various flavors of advice are provided: one for
+                     environments parameterized by the DepT monad, and others
+                     for environments parameterized by ReaderT, IO and generic
+                     monads.
 -- bug-reports:
 license:             BSD-3-Clause
 license-file:        LICENSE
