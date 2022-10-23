@@ -60,6 +60,8 @@ library
                        Dep.SimpleAdvice.Basic
                        Dep.ReaderAdvice
                        Dep.ReaderAdvice.Basic
+                       Dep.IOAdvice
+                       Dep.IOAdvice.Basic
   other-modules:       Dep.SimpleAdvice.Internal    
                         
   hs-source-dirs:      lib 

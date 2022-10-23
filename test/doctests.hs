@@ -11,4 +11,6 @@ main =
     , "lib/Dep/SimpleAdvice/Basic.hs"
     , "lib/Dep/ReaderAdvice.hs"
     , "lib/Dep/ReaderAdvice/Basic.hs"
+    , "lib/Dep/IOAdvice.hs"
+    , "lib/Dep/IOAdvice/Basic.hs"
     ]
