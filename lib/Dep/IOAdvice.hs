@@ -24,7 +24,7 @@
 --    This module provides the 'Advice' datatype, along for functions for creating,
 --    manipulating, composing and applying values of that type.
 --
---    'Advice's are type-preserving transformations on 'ReaderT'-effectful functions of
+--    'Advice's are type-preserving transformations on 'IO'-effectful functions of
 --    any number of arguments.
 --
 -- >>> :{
@@ -36,14 +36,14 @@
 --    foo2 _ = foo1
 -- :}
 --
--- They work for @ReaderT@-actions of zero arguments:
+-- They work for @IO@-actions of zero arguments:
 --
 -- >>> advise (printArgs stdout "foo0") foo0 
 -- foo0:
 -- <BLANKLINE>
 -- Sum {getSum = 5}
 --
--- And for functions of one or more arguments, provided they end on a @ReaderT@-action:
+-- And for functions of one or more arguments, provided they end on a @IO@-action:
 --
 -- >>> advise (printArgs stdout "foo1") foo1 False
 -- foo1: False
@@ -89,8 +89,6 @@ module Dep.IOAdvice
     -- * Advising and deceiving entire records
     -- $records
     adviseRecord,
-    multicurry,
-    multiuncurry,
     -- * "sop-core" re-exports
     -- $sop
     Top,
@@ -151,21 +149,16 @@ import Data.Bifunctor (first)
 -- >>> import GHC.Generics qualified
 
 
--- | A generic transformation of 'ReaderT'-effectful functions with environment
--- @e_@, base monad @m@ and return type @r@,
--- provided the functions satisfy certain constraint @ca@
--- on all of their arguments.
---
--- Note that the type constructor for the environment @e_@ is given unapplied.
--- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
--- IO ()@ doesn't. See also 'Ensure'.
+-- | A generic transformation of 'IO'-effectful functions of return type @r@,
+-- provided the functions satisfy certain constraint @ca@ on all of their
+-- arguments.
 --
 -- 'Advice's that don't care about the @ca@ constraint (because they don't
 -- touch function arguments) can leave it polymorphic, and this facilitates
 -- 'Advice' composition, but then the constraint must be given the catch-all
 -- `Top` value (using a type application) at the moment of calling 'advise'.
 --
--- See "Control.Monad.Dep.Advice.Basic" for examples.
+-- See "Dep.IOAdvice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
   Type ->
@@ -182,7 +175,7 @@ data Advice (ca :: Type -> Constraint) r where
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
---    \"concentrically\" when tweaking the final 'DepT' action.
+--    \"concentrically\" when tweaking the final 'IO' action.
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
@@ -263,7 +256,7 @@ makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, a
 data Pair a b = Pair !a !b
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
--- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
+-- effects in 'IO', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
 --  foo :: Int -> IO String
@@ -475,8 +468,8 @@ adviseRecord = _adviseRecord @ca @cr []
 
 -- $records
 --
--- 'adviseRecord' and 'deceiveRecord' are versions of 'advise' and 'deceive' that, instead of working on bare
--- functions, transform entire records-of-functions in one go. They also work
+-- 'adviseRecord' is a version of 'advise' that, instead of working on bare
+-- functions, transforms entire records-of-functions in one go. It also works
 -- with newtypes containing a single function. The records must derive 'GHC.Generics.Generic'.
 --
 -- Useful with the \"wrapped\" style of components facilitated by @Control.Monad.Dep.Has@.
@@ -538,8 +531,3 @@ adviseRecord = _adviseRecord @ca @cr []
 -- Also, the 'All' constraint says that some constraint is satisfied by all the
 -- components of an 'NP' product. It's in scope when processing the function
 -- arguments inside an 'Advice'.
-
--- $invocation
--- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
---
--- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.

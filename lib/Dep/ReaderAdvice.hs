@@ -151,20 +151,16 @@ import Data.Bifunctor (first)
 
 
 -- | A generic transformation of 'ReaderT'-effectful functions with environment
--- @e_@, base monad @m@ and return type @r@,
+-- @e@, base monad @m@ and return type @r@,
 -- provided the functions satisfy certain constraint @ca@
 -- on all of their arguments.
---
--- Note that the type constructor for the environment @e_@ is given unapplied.
--- That is, @Advice Show NilEnv IO ()@ kind-checks but @Advice Show (NilEnv IO)
--- IO ()@ doesn't. See also 'Ensure'.
 --
 -- 'Advice's that don't care about the @ca@ constraint (because they don't
 -- touch function arguments) can leave it polymorphic, and this facilitates
 -- 'Advice' composition, but then the constraint must be given the catch-all
 -- `Top` value (using a type application) at the moment of calling 'advise'.
 --
--- See "Control.Monad.Dep.Advice.Basic" for examples.
+-- See "Dep.ReaderAdvice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
   Type ->
@@ -183,7 +179,7 @@ data Advice (ca :: Type -> Constraint) e m r where
 
 -- |
 --    'Advice's compose \"sequentially\" when tweaking the arguments, and
---    \"concentrically\" when tweaking the final 'DepT' action.
+--    \"concentrically\" when tweaking the final 'ReaderT' action.
 --
 --    The first 'Advice' is the \"outer\" one. It tweaks the function arguments
 --    first, and wraps around the execution of the second, \"inner\" 'Advice'.
@@ -208,7 +204,7 @@ instance Monad m => Monoid (Advice ca e m r) where
 --    advised function.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeAdvice (\args -> pure (id,  args)) 
 -- :}
 --
@@ -228,7 +224,7 @@ makeAdvice = Advice
 --    Create an advice which only tweaks and/or analyzes the function arguments.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeArgsAdvice pure
 -- :}
 makeArgsAdvice ::
@@ -250,7 +246,7 @@ makeArgsAdvice tweakArgs =
 --    Create an advice which only tweaks the execution of the final monadic action.
 --
 -- >>> :{
---  doesNothing :: forall ca e_ m r. Monad m => Advice ca e_ m r
+--  doesNothing :: forall ca e m r. Monad m => Advice ca e m r
 --  doesNothing = makeExecutionAdvice id
 -- :}
 makeExecutionAdvice ::
@@ -266,7 +262,7 @@ makeExecutionAdvice tweakExecution = makeAdvice \args -> pure (tweakExecution, a
 data Pair a b = Pair !a !b
 
 -- | Apply an 'Advice' to some compatible function. The function must have its
--- effects in 'DepT', and all of its arguments must satisfy the @ca@ constraint.
+-- effects in 'ReaderT', and all of its arguments must satisfy the @ca@ constraint.
 --
 -- >>> :{
 --  foo :: Int -> ReaderT () IO String
@@ -337,7 +333,7 @@ instance (Functor m, Multicurryable as e m r curried) => Multicurryable (a ': as
 --    enough type information to the GADT, be it as an explicit signature:
 --
 -- >>> :{
---  stricterPrintArgs :: forall e_ m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e_ m r
+--  stricterPrintArgs :: forall e m r. MonadIO m => Advice (Show `And` Eq `And` Ord) e m r
 --  stricterPrintArgs = restrictArgs (\Dict -> Dict) (printArgs stdout "foo")
 -- :}
 --
@@ -479,8 +475,8 @@ adviseRecord = _adviseRecord @ca @e @m @cr []
 
 -- $records
 --
--- 'adviseRecord' and 'deceiveRecord' are versions of 'advise' and 'deceive' that, instead of working on bare
--- functions, transform entire records-of-functions in one go. They also work
+-- 'adviseRecord' is a version of 'advise' that, instead of working on bare
+-- functions, transforms entire records-of-functions in one go. It also works
 -- with newtypes containing a single function. The records must derive 'GHC.Generics.Generic'.
 --
 -- Useful with the \"wrapped\" style of components facilitated by @Control.Monad.Dep.Has@.
@@ -542,8 +538,3 @@ adviseRecord = _adviseRecord @ca @e @m @cr []
 -- Also, the 'All' constraint says that some constraint is satisfied by all the
 -- components of an 'NP' product. It's in scope when processing the function
 -- arguments inside an 'Advice'.
-
--- $invocation
--- These functions are helpers for running 'DepT' computations, beyond what 'runDepT' provides.
---
--- They aren't directly related to 'Advice's, but they require some of the same machinery, and that's why they are here.

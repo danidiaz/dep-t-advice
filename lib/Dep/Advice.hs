@@ -186,7 +186,7 @@ import Dep.SimpleAdvice.Internal qualified as SA
 -- 'Advice' composition, but then the constraint must be given the catch-all
 -- `Top` value (using a type application) at the moment of calling 'advise'.
 --
--- See "Control.Monad.Dep.Advice.Basic" for examples.
+-- See "Dep.Advice.Basic" for examples.
 type Advice ::
   (Type -> Constraint) ->
   ((Type -> Type) -> Type) ->
