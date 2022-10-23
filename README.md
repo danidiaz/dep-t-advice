@@ -120,22 +120,34 @@ Once we decide to use `DepT`, we can apply the advice, because advice only
 works on functions that end on a `DepT` action. Also, advice might depend on
 the full gamut of functionality stored in the environment.
 
+## What about  `Dep.ReaderAdvice` and `Dep.IOAdvice`?
+
+`Advice`s from `Dep.Advice` require us to work with `DepT`, but `DepT` is kind
+of weird. Instead, we may might to use more common monads for our effects, like
+`ReaderT` o plain old `IO`.
+
+That's why `Dep.ReaderAdvice` and `Dep.IOAdvice` exist: they provide alternative
+versions of the `Advice` type which work with those monads.
+
+Ain't that a lot of code duplication? Why not have a single `Advice` type which
+works with all monads? That leads us to...
+
 ## What about `Dep.SimpleAdvice`?
 
-`Advice`s form `Dep.Advice` work with the `DepT` monad, but
-that's a bit too specialized. What if I want to use plain `IO` as the monad
-which parameterizes my record-of-functions?
+`Dep.SimpleAdvice` provides a version of the `Advice` type that can be used with
+different concrete monads like `ReaderT` or `IO`.
 
-`Dep.SimpleAdvice` provides a version of the `Advice` type that
-works with records-of-functions parameterized with `IO` or other concrete
-monads. 
+See [this
+thread](https://discourse.haskell.org/t/decorate-your-records-of-functions-with-this-weird-trick/3675)
+in the Haskell Discourse for more info.
 
-This simpler `Advice` can be useful when performing dependency injection
-through [`fixEnv`](https://hackage.haskell.org/package/dep-t-0.5.0.0/docs/Control-Monad-Dep-Env.html#v:fixEnv).
+There's a catch, however. `Dep.SimpleAdvice` depends on the `coerce` mechanism
+of Haskell, and it can sometimes be finicky, for example when some required
+constructor hasn't been exported, or when there are polymorphic functions
+involved.
 
-There are conversion functions between the two versions of `Advice`.
-
-See [this thread](https://discourse.haskell.org/t/decorate-your-records-of-functions-with-this-weird-trick/3675) in the Haskell Discourse for more info.
+That's the reason `Dep.ReaderAdvice` and `Dep.IOAdvice` are still necessary. For
+their particular monads, they work in more cases.
 
 ## Historical aside
 
